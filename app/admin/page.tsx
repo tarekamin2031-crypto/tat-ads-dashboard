@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { listAccounts } from "@/lib/accounts";
+import { getAlerts } from "@/lib/alerts";
 import { listAdAccounts } from "@/lib/meta";
 import { BrandBar } from "@/components/Brand";
 import { addClient, resetPassword, setLogo } from "./actions";
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60; // adding a client pulls its first 90 days inside the server action
 
 const box = { background: "#fff", borderRadius: 8, border: "1px solid #e4e6eb", padding: 16, marginBottom: 20 };
+const LEVEL_COLOR = { bad: "#c62828", warn: "#ef6c00", good: "#2e7d32" };
 const input = { padding: 8, borderRadius: 6, border: "1px solid #dadde1", fontSize: 14 };
 const button = { padding: "8px 14px", borderRadius: 6, border: 0, background: "#0f766e", color: "#fff", cursor: "pointer" };
 
@@ -18,6 +20,8 @@ export default async function AdminPage({
 }) {
   const { created, pw, error } = await searchParams;
   const [accounts, adAccounts, h] = await Promise.all([listAccounts(), listAdAccounts(), headers()]);
+  const alertsByClient = await Promise.all(accounts.map(async (a) => ({ account: a, alerts: await getAlerts(a) })));
+  const withAlerts = alertsByClient.filter((c) => c.alerts.length > 0);
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
   const taken = new Set(accounts.map((a) => a.ad_account_id));
   const available = adAccounts.filter((a) => !taken.has(a.account_id));
@@ -26,9 +30,30 @@ export default async function AdminPage({
     <>
     <BrandBar />
     <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
+      <section style={box}>
+        <h2 style={{ fontSize: 16, marginTop: 0 }}>Alerts — yesterday vs the previous 7-day average</h2>
+        {accounts.length === 0 && <p style={{ color: "#65676b", margin: 0 }}>No clients yet.</p>}
+        {accounts.length > 0 && withAlerts.length === 0 && (
+          <p style={{ color: "#2e7d32", margin: 0 }}>All normal: no client moved 40% or more on spend or cost per result.</p>
+        )}
+        {withAlerts.map(({ account, alerts }) => (
+          <div key={account.slug} style={{ padding: "10px 0", borderTop: "1px solid #f0f2f5" }}>
+            <a href={`/c/${account.slug}`} style={{ fontWeight: 600 }}>{account.name}</a>
+            {alerts.map((a, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", marginTop: 4, fontSize: 14 }}>
+                <span style={{ color: LEVEL_COLOR[a.level] }}>●</span>
+                <span>
+                  <strong>{a.scope}:</strong> {a.text}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </section>
+
       <h1 style={{ fontSize: 22, marginTop: 0 }}>Clients</h1>
 
-      {error && <div style={{ ...box, color: "#c62828" }}>{error}</div>}
+      {error &&<div style={{ ...box, color: "#c62828" }}>{error}</div>}
       {created && pw && (
         <div style={{ ...box, background: "#e8f5e9" }}>
           <strong>Link:</strong> {origin}/c/{created}
