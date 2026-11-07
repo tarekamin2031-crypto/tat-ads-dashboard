@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { BrandBar } from "@/components/Brand";
 import { requireAdmin } from "@/lib/admin";
 import { CopyLink } from "@/components/CopyLink";
-import { getAccount } from "@/lib/accounts";
+import { getAccount, isMetaAccount } from "@/lib/accounts";
 import { db } from "@/lib/db";
 import { insightsKey, PLATFORMS, platformReady } from "@/lib/platforms";
 import { formatCustomerId, listGoogleAccounts } from "@/lib/google";
@@ -199,8 +199,8 @@ export default async function ClientSettings({
               p.id === "meta" ? (
                 <li key={p.id} className="plat">
                   <div className="plat-name">{p.label}</div>
-                  <span className="mono grow">{a.ad_account_id}</span>
-                  <span className="pill good">Live</span>
+                  <span className="mono grow">{isMetaAccount(a) ? a.ad_account_id : "This client does not run Meta"}</span>
+                  <span className={`pill ${isMetaAccount(a) ? "good" : "muted"}`}>{isMetaAccount(a) ? "Live" : "Not linked"}</span>
                 </li>
               ) : (
                 <li key={p.id} className="plat">

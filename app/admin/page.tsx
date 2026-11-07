@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { listAccounts } from "@/lib/accounts";
+import { isMetaAccount, listAccounts, primaryPlatform } from "@/lib/accounts";
 import { getAlerts } from "@/lib/alerts";
 import { getAnalysis } from "@/lib/analysis";
 import { billingAlerts, getBilling, type Billing } from "@/lib/billing";
@@ -9,6 +9,8 @@ import { loadCredentials } from "@/lib/secrets";
 import { BrandBar } from "@/components/Brand";
 import { requireAdmin } from "@/lib/admin";
 import { CopyLink } from "@/components/CopyLink";
+import { db } from "@/lib/db";
+import { platformById } from "@/lib/platforms";
 import { addClient } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +61,8 @@ export default async function AdminPage({
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
   const taken = new Set(accounts.map((a) => a.ad_account_id));
   const available = adAccounts.filter((a) => !taken.has(a.account_id));
+  const takenGoogle = new Set((await db.execute("SELECT external_id FROM account_platforms WHERE platform = 'google'")).rows.map((r) => String(r.external_id).replace(/\D/g, "")));
+  const googleAvailable = googleAccounts.filter((g) => !takenGoogle.has(g.id));
 
   return (
     <>
@@ -153,6 +157,8 @@ export default async function AdminPage({
                       </div>
                       <div className="cc-sub">of {fmt(billing.cap ?? 0)} limit{billing.availableNet !== null ? ` · net ${fmt(billing.availableNet)} after tax` : ""}{billing.statusCode !== 1 ? ` · ${billing.status}` : ""}</div>
                     </>
+                  ) : !isMetaAccount(a) ? (
+                    <span className="chip">{platformById(primaryPlatform(a))?.label ?? primaryPlatform(a)} only</span>
                   ) : (
                     <BillingSummary b={billing} />
                   )}
@@ -232,15 +238,16 @@ export default async function AdminPage({
         <details className="add-client">
         <summary className="section-title">Add client</summary>
         <section className="card form-card">
-          {available.length === 0 ? (
+          {available.length === 0 && googleAvailable.length === 0 ? (
             <div className="all-clear" style={{ color: "var(--muted)", padding: 0 }}>
-              Every ad account this token can see is already added.
+              Every Meta and Google Ads account we can see is already added.
             </div>
           ) : (
             <form action={addClient} className="form-grid">
               <label className="f span2">
-                <span>Ad account</span>
-                <select className="field" name="ad_account_id" required>
+                <span>Meta ad account <em>optional if the client only runs Google Ads</em></span>
+                <select className="field" name="ad_account_id" defaultValue="">
+                  <option value="">None (no Meta)</option>
                   {available.map((a) => (
                     <option key={a.account_id} value={a.account_id}>
                       {a.name} ({a.currency})
@@ -248,12 +255,12 @@ export default async function AdminPage({
                   ))}
                 </select>
               </label>
-              {googleAccounts.length > 0 && (
+              {googleAvailable.length > 0 && (
                 <label className="f span2">
                   <span>Google Ads account <em>optional</em></span>
                   <select className="field" name="google_customer_id" defaultValue="">
                     <option value="">None</option>
-                    {googleAccounts.map((g) => (
+                    {googleAvailable.map((g) => (
                       <option key={g.id} value={g.id}>
                         {g.name} · {formatCustomerId(g.id)}{g.currency ? ` (${g.currency})` : ""}
                       </option>

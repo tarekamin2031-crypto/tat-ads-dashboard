@@ -123,7 +123,7 @@ async function accessHint(version: string, token: string, customerId: string, lo
   }
 }
 
-export type GoogleAccountInfo = { id: string; name: string; currency: string };
+export type GoogleAccountInfo = { id: string; name: string; currency: string; timezone: string };
 let accountsCache: { at: number; list: GoogleAccountInfo[] } | null = null;
 
 // Client accounts under the agency's manager (MCC), for the "pick an account" lists. Returns [] when
@@ -134,7 +134,7 @@ export async function listGoogleAccounts(): Promise<GoogleAccountInfo[]> {
   if (accountsCache && Date.now() - accountsCache.at < 5 * 60_000) return accountsCache.list;
   try {
     const token = await accessToken();
-    const query = `SELECT customer_client.id, customer_client.descriptive_name, customer_client.currency_code, customer_client.manager, customer_client.status
+    const query = `SELECT customer_client.id, customer_client.descriptive_name, customer_client.currency_code, customer_client.time_zone, customer_client.manager, customer_client.status
       FROM customer_client WHERE customer_client.status = 'ENABLED'`;
     let res: Response | null = null;
     for (const v of workingVersion ? [workingVersion] : VERSIONS) {
@@ -153,7 +153,7 @@ export async function listGoogleAccounts(): Promise<GoogleAccountInfo[]> {
     const list: GoogleAccountInfo[] = (body.results ?? [])
       .map((r: any) => r.customerClient)
       .filter((c: any) => c && !c.manager)
-      .map((c: any) => ({ id: String(c.id), name: String(c.descriptiveName ?? `Account ${c.id}`), currency: String(c.currencyCode ?? "") }))
+      .map((c: any) => ({ id: String(c.id), name: String(c.descriptiveName ?? `Account ${c.id}`), currency: String(c.currencyCode ?? ""), timezone: String(c.timeZone ?? "UTC") }))
       .sort((a: GoogleAccountInfo, b: GoogleAccountInfo) => a.name.localeCompare(b.name));
     accountsCache = { at: Date.now(), list };
     return list;

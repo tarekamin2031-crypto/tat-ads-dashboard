@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { getAccount } from "@/lib/accounts";
 import { hashPassword } from "@/lib/auth";
 import { db, ensureSchema } from "@/lib/db";
+import { listGoogleAccounts } from "@/lib/google";
 import { listAdAccounts } from "@/lib/meta";
+import { loadCredentials } from "@/lib/secrets";
 import { syncAccount, syncOtherPlatforms } from "@/lib/sync";
 
 const slugify = (s: string) =>
@@ -31,26 +33,35 @@ export async function setLogo(slug: string, formData: FormData) {
 
 export async function addClient(formData: FormData) {
   await ensureSchema();
-  const adAccountId = String(formData.get("ad_account_id") ?? "");
+  await loadCredentials();
+  const metaId = String(formData.get("ad_account_id") ?? "");
+  const googleId = String(formData.get("google_customer_id") ?? "").replace(/\D/g, "");
   const name = String(formData.get("name") ?? "").trim();
   const password = String(formData.get("password") ?? "").trim() || randomBytes(6).toString("hex");
+  if (!metaId && !googleId) redirect("/admin?error=Choose+a+Meta+ad+account,+a+Google+Ads+account,+or+both");
 
-  const meta = (await listAdAccounts()).find((a) => a.account_id === adAccountId);
-  if (!meta) redirect("/admin?error=Ad+account+not+found+for+this+token");
+  // A client can run Meta, Google Ads or both. The first platform picked is the client's primary one:
+  // Meta clients keep their plain ad account id, Google-only clients use "google:<customer id>".
+  const meta = metaId ? (await listAdAccounts()).find((a) => a.account_id === metaId) : null;
+  if (metaId && !meta) redirect("/admin?error=Ad+account+not+found+for+this+token");
+  const google = googleId ? (await listGoogleAccounts()).find((g) => g.id === googleId) : null;
+  if (googleId && !google) redirect("/admin?error=Google+Ads+account+not+found+under+your+manager+account");
 
+  const accountKey = meta ? metaId : `google:${googleId}`;
+  const currency = meta?.currency ?? google!.currency ?? "USD";
+  const timezone = meta?.timezone_name ?? google!.timezone ?? "UTC";
   const logo = await logoFromForm(formData);
-  const displayName = name || meta.name.replace(/^ea\s*-\s*/i, "");
-  let slug = slugify(displayName) || `client-${adAccountId.slice(-6)}`;
-  if (await getAccount(slug)) slug = `${slug}-${adAccountId.slice(-4)}`;
+  const displayName = name || (meta ? meta.name.replace(/^ea\s*-\s*/i, "") : google!.name);
+  const suffix = (metaId || googleId).slice(-4);
+  let slug = slugify(displayName) || `client-${suffix}`;
+  if (await getAccount(slug)) slug = `${slug}-${suffix}`;
 
   await db.execute({
     sql: `INSERT INTO accounts (slug, name, ad_account_id, currency, timezone, password_hash, logo)
           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    args: [slug, displayName, adAccountId, meta.currency, meta.timezone_name, hashPassword(password), logo],
+    args: [slug, displayName, accountKey, currency, timezone, hashPassword(password), logo],
   });
 
-  // Optional Google Ads account picked in the form (must be one the agency's manager account can see).
-  const googleId = String(formData.get("google_customer_id") ?? "").replace(/\D/g, "");
   if (googleId) {
     await db.execute({
       sql: `INSERT INTO account_platforms (slug, platform, external_id) VALUES (?, 'google', ?)

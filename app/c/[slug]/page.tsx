@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { BrandBar, BrandFooter } from "@/components/Brand";
 import { Dashboard, type PlatformTab } from "@/components/Dashboard";
-import { getAccount } from "@/lib/accounts";
+import { getAccount, isMetaAccount, primaryPlatform } from "@/lib/accounts";
 import { sessionCookieName, sessionToken } from "@/lib/auth";
 import { resolveRange } from "@/lib/dates";
 import { db } from "@/lib/db";
@@ -38,13 +38,18 @@ export default async function ClientPage({
     const range = resolveRange(query, account.timezone);
     // Tabs: Meta always, plus each linked platform that has data synced.
     const linked = await db.execute({ sql: "SELECT platform, external_id FROM account_platforms WHERE slug = ?", args: [slug] });
-    const tabs: PlatformTab[] = [{ id: "meta", label: "Meta", key: account.ad_account_id }];
+    const tabs: PlatformTab[] = isMetaAccount(account) ? [{ id: "meta", label: "Meta", key: account.ad_account_id }] : [];
     for (const r of linked.rows) {
       const def = platformById(String(r.platform));
       if (!def || def.id === "meta" || !platformReady(def.id)) continue;
       const key = insightsKey(def.id, String(r.external_id));
       const has = await db.execute({ sql: "SELECT 1 FROM daily_insights WHERE account_id = ? LIMIT 1", args: [key] });
-      if (has.rows.length > 0) tabs.push({ id: def.id, label: def.label.replace(" Ads", ""), key });
+      // The client's primary platform always has a tab, even before its first data arrives.
+      if (has.rows.length > 0 || key === account.ad_account_id) tabs.push({ id: def.id, label: def.label.replace(" Ads", ""), key });
+    }
+    if (tabs.length === 0) {
+      const pid = primaryPlatform(account);
+      tabs.push({ id: pid, label: platformById(pid)?.label.replace(" Ads", "") ?? pid, key: account.ad_account_id });
     }
     const current = tabs.find((t) => t.id === query.p) ?? tabs[0];
     return <Dashboard account={account} range={range} basePath={`/c/${slug}`} platforms={tabs} tax={query.tax === "1"} current={{ ...current, label: current.id === "meta" ? "Meta Ads" : `${current.label} Ads` }} />;

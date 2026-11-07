@@ -14,6 +14,11 @@ export type Account = {
   monthly_budget: number | null; // planned monthly spend (account currency, before tax); null = not set
 };
 
+// A client's primary data source. Meta clients keep their plain ad account id; clients that only run
+// another platform (e.g. Google Ads) use that platform's insights key, "google:<customer id>".
+export const isMetaAccount = (a: Pick<Account, "ad_account_id">) => !a.ad_account_id.includes(":");
+export const primaryPlatform = (a: Pick<Account, "ad_account_id">) => (isMetaAccount(a) ? "meta" : a.ad_account_id.split(":")[0]);
+
 export const DEFAULT_LOW_BALANCE = 1000;
 export const DEFAULT_CHANGE_PCT = 0.4;
 

@@ -1,4 +1,4 @@
-import type { Account } from "./accounts";
+import { isMetaAccount, type Account } from "./accounts";
 import { dateInTz } from "./dates";
 import { db } from "./db";
 import { fetchCampaigns, fetchInsights, type InsightRow } from "./meta";
@@ -16,6 +16,7 @@ const COLS = [
 ] as const;
 
 export async function syncAccount(acc: Account): Promise<string> {
+  if (!isMetaAccount(acc)) return `${acc.name}: no Meta account (data comes from other platforms)`;
   const existing = await db.execute({
     sql: "SELECT COUNT(*) AS n FROM daily_insights WHERE account_id = ?",
     args: [acc.ad_account_id],
@@ -98,6 +99,7 @@ export async function syncOtherPlatforms(acc: Account): Promise<string[]> {
     try {
       const rows = await f.fetch(String(r.external_id), since, until);
       await storeInsights(key, rows);
+      await db.execute({ sql: "INSERT OR REPLACE INTO sync_log (account_id, synced_at) VALUES (?, ?)", args: [key, new Date().toISOString()] });
       notes.push(`${acc.name} [${f.label}]: ${since} -> ${until}${firstRun ? " (backfill)" : ""}, ${rows.length} daily rows`);
     } catch (e) {
       notes.push(`${acc.name} [${f.label}]: FAILED ${(e as Error).message}`);

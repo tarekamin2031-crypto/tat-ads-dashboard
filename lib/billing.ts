@@ -1,4 +1,4 @@
-import type { Account } from "./accounts";
+import { isMetaAccount, type Account } from "./accounts";
 import type { Alert } from "./alerts";
 import { fetchAccountBilling } from "./meta";
 
@@ -40,6 +40,7 @@ const cache = new Map<string, { at: number; value: Billing | null }>();
 // Fetched live (balances move during the day) and cached briefly so page views don't hammer Meta.
 // Any failure returns null so the rest of the page still renders.
 export async function getBilling(account: Account): Promise<Billing | null> {
+  if (!isMetaAccount(account)) return null; // billing comes from Meta only
   const hit = cache.get(account.ad_account_id);
   // The threshold is a per-client setting, so it is applied after the cache, not stored in it.
   const withLimit = (b: Billing | null): Billing | null =>
