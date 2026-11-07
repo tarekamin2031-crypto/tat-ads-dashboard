@@ -138,21 +138,28 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
         const n = num(r.metrics?.allConversions);
         const k = `${r.segments?.date}|${r.campaign?.id}`;
         const d = perDay.get(k) ?? { calls: 0, local: 0 };
-        if (isCall(name, cat)) d.calls += n;
-        else if (isLocal(name, cat)) d.local += n;
+        // Google's "Local actions" total includes click-to-call actions (1,796 + 25 = the 1.82k Google shows).
+        if (isCall(name, cat)) {
+          d.calls += n;
+          d.local += n;
+        } else if (isLocal(name, cat)) d.local += n;
         perDay.set(k, d);
         const label = `${name || "?"} [${cat}]${isCall(name, cat) ? " → calls" : isLocal(name, cat) ? " → local" : " → ignored"}`;
         byCategory.set(label, (byCategory.get(label) ?? 0) + n);
       }
-      lastNote = `all conversions by action: ${[...byCategory].sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} ${Math.round(n)}`).join(", ")}`;
+      lastNote = `local actions = every action below except ignored; all conversions by action: ${[...byCategory].sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} ${Math.round(n)}`).join(", ")}`;
     } catch (e) {
       lastNote = `could not read conversion types: ${(e as Error).message}`;
     }
   }
+  // "Call clicks" in Google's overview is the campaign's phone-call metric, not the click-to-call conversion
+  // action. Use it when the account reports any, otherwise fall back to the conversion-based count.
+  const phoneTotal = flat.reduce((n, r) => n + num(r.metrics?.phoneCalls), 0);
+  if (flat.length > 0) lastNote += `${lastNote ? "; " : ""}phone_calls metric total: ${Math.round(phoneTotal)}`;
   for (const r of flat) {
     const row = toRow(r, `google:${r.campaign?.id}-campaign`, LABELS[String(r.campaign?.advertisingChannelType)] ?? "Campaign");
     const d = perDay.get(`${r.segments?.date}|${r.campaign?.id}`);
-    row.calls = d ? d.calls : num(r.metrics?.phoneCalls);
+    row.calls = phoneTotal > 0 ? num(r.metrics?.phoneCalls) : d ? d.calls : 0;
     row.local_actions = d ? d.local : 0;
     if (row.leads === 0) row.leads = row.calls;
     rows.push(row);
