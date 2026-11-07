@@ -355,6 +355,9 @@ export async function Dashboard({
           </div>
         </nav>
 
+        {!isMeta && !lastRes.rows[0]?.d && (
+          <p className="summary">No {current.label} data has been pulled for this account yet. It appears here after the next daily sync.</p>
+        )}
         <p className="summary">{summary.join(" ")}</p>
 
         <section className={`tiles${showRoas ? " four" : ""}`} aria-label="Key numbers">

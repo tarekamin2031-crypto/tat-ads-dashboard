@@ -43,9 +43,8 @@ export default async function ClientPage({
       const def = platformById(String(r.platform));
       if (!def || def.id === "meta" || !platformReady(def.id)) continue;
       const key = insightsKey(def.id, String(r.external_id));
-      const has = await db.execute({ sql: "SELECT 1 FROM daily_insights WHERE account_id = ? LIMIT 1", args: [key] });
-      // The client's primary platform always has a tab, even before its first data arrives.
-      if (has.rows.length > 0 || key === account.ad_account_id) tabs.push({ id: def.id, label: def.label.replace(" Ads", ""), key });
+      // Every linked platform gets a tab; the page says so when no data has arrived yet.
+      tabs.push({ id: def.id, label: def.label.replace(" Ads", ""), key });
     }
     if (tabs.length === 0) {
       const pid = primaryPlatform(account);

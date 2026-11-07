@@ -45,63 +45,75 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
   const login = digits(cred("GOOGLE_ADS_LOGIN_CUSTOMER_ID"));
   if (login) headers["login-customer-id"] = login;
 
-  const query = `SELECT segments.date, campaign.id, campaign.name, ad_group.id, ad_group.name,
-      metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions, metrics.conversions_value
-    FROM ad_group
-    WHERE segments.date BETWEEN '${since}' AND '${until}'`;
-
-  const rows: InsightRow[] = [];
-  let pageToken: string | undefined;
-  do {
-    let res: Response | null = null;
-    for (const v of workingVersion ? [workingVersion] : VERSIONS) {
-      res = await fetch(`https://googleads.googleapis.com/${v}/customers/${id}/googleAds:search`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ query, ...(pageToken ? { pageToken } : {}) }),
-      });
-      if (res.status !== 404) {
-        workingVersion = v;
-        break;
+  // Runs one GAQL query, following pages and trying API versions as needed.
+  async function search(query: string): Promise<any[]> {
+    const out: any[] = [];
+    let pageToken: string | undefined;
+    do {
+      let res: Response | null = null;
+      for (const v of workingVersion ? [workingVersion] : VERSIONS) {
+        res = await fetch(`https://googleads.googleapis.com/${v}/customers/${id}/googleAds:search`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ query, ...(pageToken ? { pageToken } : {}) }),
+        });
+        if (res.status !== 404) {
+          workingVersion = v;
+          break;
+        }
+        workingVersion = null;
       }
-      workingVersion = null;
-    }
-    if (!res || res.status === 404) {
-      throw new Error(`Google Ads report failed: HTTP 404 on every API version tried (${VERSIONS.join(", ")}). Check the customer ID ${id} and set GOOGLE_ADS_API_VERSION to a version listed at developers.google.com/google-ads/api/docs/release-notes`);
-    }
-    const text = await res.text();
-    let body: any = null;
-    try {
-      body = JSON.parse(text);
-    } catch {
-      /* not JSON */
-    }
-    if (!res.ok || !body) {
-      const msg = body?.error?.details?.[0]?.errors?.[0]?.message ?? body?.error?.message ?? `HTTP ${res.status} ${text.slice(0, 160)}`;
-      let hint = "";
-      if (res.status === 403) hint = await accessHint(workingVersion ?? VERSIONS[0], token, id, login);
-      throw new Error(`Google Ads report failed: ${msg}${hint}`);
-    }
-    for (const r of body.results ?? []) {
-      const m = r.metrics ?? {};
-      rows.push({
-        date: String(r.segments?.date),
-        campaign_id: `google:${r.campaign?.id}`,
-        campaign_name: String(r.campaign?.name ?? "Campaign"),
-        adset_id: `google:${r.adGroup?.id}`,
-        adset_name: String(r.adGroup?.name ?? "Ad group"),
-        spend: num(m.costMicros) / 1_000_000,
-        impressions: num(m.impressions),
-        reach: 0, // Google does not report reach per ad group
-        clicks: num(m.clicks),
-        leads: num(m.conversions),
-        purchases: 0,
-        messages: 0,
-        purchase_value: num(m.conversionsValue),
-      });
-    }
-    pageToken = body.nextPageToken || undefined;
-  } while (pageToken);
+      if (!res || res.status === 404) {
+        throw new Error(`Google Ads report failed: HTTP 404 on every API version tried (${VERSIONS.join(", ")}). Check the customer ID ${id} and set GOOGLE_ADS_API_VERSION to a version listed at developers.google.com/google-ads/api/docs/release-notes`);
+      }
+      const text = await res.text();
+      let body: any = null;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        /* not JSON */
+      }
+      if (!res.ok || !body) {
+        const msg = body?.error?.details?.[0]?.errors?.[0]?.message ?? body?.error?.message ?? `HTTP ${res.status} ${text.slice(0, 160)}`;
+        let hint = "";
+        if (res.status === 403) hint = await accessHint(workingVersion ?? VERSIONS[0], token, id, login);
+        throw new Error(`Google Ads report failed: ${msg}${hint}`);
+      }
+      out.push(...(body.results ?? []));
+      pageToken = body.nextPageToken || undefined;
+    } while (pageToken);
+    return out;
+  }
+
+  const metrics = "metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions, metrics.conversions_value";
+  const toRow = (r: any, adsetId: string, adsetName: string): InsightRow => {
+    const m = r.metrics ?? {};
+    return {
+      date: String(r.segments?.date),
+      campaign_id: `google:${r.campaign?.id}`,
+      campaign_name: String(r.campaign?.name ?? "Campaign"),
+      adset_id: adsetId,
+      adset_name: adsetName,
+      spend: num(m.costMicros) / 1_000_000,
+      impressions: num(m.impressions),
+      reach: 0, // Google does not report reach per ad group
+      clicks: num(m.clicks),
+      leads: num(m.conversions),
+      purchases: 0,
+      messages: 0,
+      purchase_value: num(m.conversionsValue),
+    };
+  };
+
+  // Search, Display, Video, Demand Gen and Shopping campaigns report at ad-group level.
+  const groups = await search(`SELECT segments.date, campaign.id, campaign.name, ad_group.id, ad_group.name, ${metrics}
+    FROM ad_group WHERE segments.date BETWEEN '${since}' AND '${until}'`);
+  const rows = groups.map((r) => toRow(r, `google:${r.adGroup?.id}`, String(r.adGroup?.name ?? "Ad group")));
+
+  // Performance Max has no ad groups, so it is read at campaign level (one row per campaign per day).
+  const pmax = await search(`SELECT segments.date, campaign.id, campaign.name, ${metrics}
+    FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}' AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'`);
+  for (const r of pmax) rows.push(toRow(r, `google:${r.campaign?.id}-pmax`, "Performance Max"));
   return rows;
 }
 
