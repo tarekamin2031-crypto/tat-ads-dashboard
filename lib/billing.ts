@@ -4,8 +4,6 @@ import { fetchAccountBilling } from "./meta";
 
 // 14% VAT + 6% payment tax, added together.
 export const TAX_RATE = 0.2;
-// Warn when this much (in account currency) is left before the account stops delivering.
-export const LOW_BALANCE_THRESHOLD = 1000;
 
 const STATUS: Record<number, string> = {
   1: "Active",
@@ -30,6 +28,7 @@ export type Billing = {
   amountDue: number; // owed now (card accounts only)
   funding: string;
   low: boolean;
+  threshold: number; // per-client "low balance" limit
 };
 
 // Meta returns money in minor units (cents/piasters) as strings.
@@ -42,11 +41,18 @@ const cache = new Map<string, { at: number; value: Billing | null }>();
 // Any failure returns null so the rest of the page still renders.
 export async function getBilling(account: Account): Promise<Billing | null> {
   const hit = cache.get(account.ad_account_id);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
+  // The threshold is a per-client setting, so it is applied after the cache, not stored in it.
+  const withLimit = (b: Billing | null): Billing | null =>
+    b && { ...b, threshold: account.low_balance, low: b.available !== null && b.available <= account.low_balance };
+  if (hit && Date.now() - hit.at < TTL_MS) return withLimit(hit.value);
 
   let value: Billing | null = null;
   try {
-    const raw = await fetchAccountBilling(account.ad_account_id);
+    // Never let a slow Meta call hold the whole page: give up after 6s (the panel then shows "unavailable").
+    const raw = await Promise.race([
+      fetchAccountBilling(account.ad_account_id),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("Billing fetch timed out")), 6000)),
+    ]);
     const spent = major(raw.amount_spent);
     const cap = major(raw.spend_cap) || null;
     const available = cap === null ? null : Math.max(cap - spent, 0);
@@ -61,13 +67,14 @@ export async function getBilling(account: Account): Promise<Billing | null> {
       availableNet: available === null ? null : available / (1 + TAX_RATE),
       amountDue: major(raw.balance),
       funding: raw.is_prepay_account ? "Prepaid balance" : (raw.funding_source_details?.display_string ?? "Card"),
-      low: available !== null && available <= LOW_BALANCE_THRESHOLD,
+      low: false,
+      threshold: account.low_balance,
     };
   } catch (e) {
     console.error(`Billing fetch failed for ${account.name}`, e);
   }
   cache.set(account.ad_account_id, { at: Date.now(), value });
-  return value;
+  return withLimit(value);
 }
 
 const money = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -82,7 +89,7 @@ export function billingAlerts(b: Billing | null): Alert[] {
     alerts.push({
       scope: "Billing",
       level: "bad",
-      text: `Only ${money(b.available)} ${b.currency} left before the account stops (alert at ${money(LOW_BALANCE_THRESHOLD)})`,
+      text: `Only ${money(b.available)} ${b.currency} left before the account stops (alert at ${money(b.threshold)})`,
     });
   }
   return alerts;

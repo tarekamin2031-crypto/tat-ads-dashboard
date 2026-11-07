@@ -21,3 +21,11 @@ export function sessionToken(slug: string, passwordHash: string): string {
 }
 
 export const sessionCookieName = (slug: string) => `s_${slug}`;
+
+// Admin session cookie value (must match middleware.ts). Changing DASHBOARD_PASSWORD signs everyone out.
+export function adminToken(): string {
+  const secret = process.env.SESSION_SECRET;
+  const password = process.env.DASHBOARD_PASSWORD;
+  if (!secret || !password) throw new Error("Missing env var SESSION_SECRET or DASHBOARD_PASSWORD");
+  return createHmac("sha256", secret).update(`admin:${password}`).digest("hex");
+}

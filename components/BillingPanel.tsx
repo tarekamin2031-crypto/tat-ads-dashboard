@@ -1,65 +1,91 @@
-import { billingAlerts, LOW_BALANCE_THRESHOLD, TAX_RATE, type Billing } from "@/lib/billing";
+import { billingAlerts, TAX_RATE, type Billing } from "@/lib/billing";
 
 const money = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+
+// Red banners shown at the very top of the page, before anything else.
+export function BillingAlerts({ billing }: { billing: Billing | null }) {
+  return (
+    <>
+      {billingAlerts(billing).map((a, i) => (
+        <div key={i} className="banner" role="alert">
+          <span aria-hidden>⚠</span>
+          <span>
+            <strong>{a.scope}:</strong> {a.text}
+          </span>
+        </div>
+      ))}
+    </>
+  );
+}
 
 export function BillingPanel({ billing }: { billing: Billing | null }) {
   if (!billing) {
     return (
-      <section style={{ margin: "20px 0", color: "#65676b", fontSize: 14 }}>
-        Billing details are temporarily unavailable.
+      <section className="card billing">
+        <div className="billing-note">Billing details are temporarily unavailable.</div>
       </section>
     );
   }
   const cur = billing.currency;
-  const alerts = billingAlerts(billing);
-
-  const stats: [string, string, boolean?][] = [
-    [
-      "Available balance",
-      billing.available === null ? "No spending limit" : `${money(billing.available)} ${cur}`,
-      billing.low,
-    ],
-    [
-      "Net for ads after tax",
-      billing.availableNet === null ? "-" : `${money(billing.availableNet)} ${cur}`,
-    ],
-    ["Spending limit", billing.cap === null ? "None" : `${money(billing.cap)} ${cur}`],
-    ...(billing.isPrepay ? [] : ([["Amount due now", `${money(billing.amountDue)} ${cur}`]] as [string, string][])),
-    ["Payment", billing.funding],
-    ["Account status", billing.status, billing.statusCode !== 1],
-  ];
+  const remainingPct = billing.cap && billing.available !== null ? Math.min(100, (billing.available / billing.cap) * 100) : null;
 
   return (
-    <section style={{ margin: "20px 0" }}>
-      {alerts.map((a, i) => (
-        <div
-          key={i}
-          style={{ background: "#fdecea", color: "#b71c1c", border: "1px solid #f5c6cb", borderRadius: 8, padding: "10px 14px", marginBottom: 10, fontSize: 14 }}
-        >
-          <strong>⚠ {a.scope}:</strong> {a.text}
-        </div>
-      ))}
-      <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>Billing &amp; limit</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
-        {stats.map(([label, value, warn]) => (
-          <div
-            key={label}
-            style={{
-              background: warn ? "#fdecea" : "#fff",
-              borderRadius: 8,
-              padding: 14,
-              border: `1px solid ${warn ? "#f5c6cb" : "#e4e6eb"}`,
-            }}
-          >
-            <div style={{ color: "#65676b", fontSize: 13 }}>{label}</div>
-            <div style={{ fontSize: 20, fontWeight: 600, color: warn ? "#b71c1c" : undefined }}>{value}</div>
+    <>
+      <section className="card billing" aria-label="Billing and spending limit">
+        <div className="billing-top">
+          <div>
+            <div className="tile-label">Available balance</div>
+            <div className={`billing-big${billing.low ? " low" : ""}`}>
+              {billing.available === null ? "No spending limit" : `${money(billing.available)} ${cur}`}
+            </div>
           </div>
-        ))}
-      </div>
-      <small style={{ color: "#8a8d91", display: "block", marginTop: 8 }}>
-        Net for ads = available balance ÷ {(1 + TAX_RATE).toFixed(2)} (14% VAT + 6% payment tax). Warning appears at{" "}
-        {money(LOW_BALANCE_THRESHOLD)} {cur} or less.
-      </small>
-    </section>
+          {billing.cap !== null && (
+            <div className="billing-note">
+              of {money(billing.cap)} {cur} limit · {money(billing.spent)} spent
+            </div>
+          )}
+        </div>
+
+        {remainingPct !== null && (
+          <div
+            className={`meter${billing.low ? " low" : ""}`}
+            role="meter"
+            aria-label="Remaining balance"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(remainingPct)}
+          >
+            <i style={{ width: `${remainingPct}%` }} />
+          </div>
+        )}
+
+        <div className="billing-grid">
+          {billing.availableNet !== null && (
+            <div className="kv">
+              <span>Net for ads after tax</span>
+              <b>{money(billing.availableNet)} {cur}</b>
+            </div>
+          )}
+          {!billing.isPrepay && (
+            <div className="kv">
+              <span>Amount due now</span>
+              <b>{money(billing.amountDue)} {cur}</b>
+            </div>
+          )}
+          <div className="kv">
+            <span>Payment</span>
+            <b>{billing.funding}</b>
+          </div>
+          <div className="kv">
+            <span>Account status</span>
+            <b className={billing.statusCode !== 1 ? "warn" : undefined}>{billing.status}</b>
+          </div>
+        </div>
+
+        <div className="fine">
+          Net for ads = available balance ÷ {(1 + TAX_RATE).toFixed(2)} (14% VAT + 6% payment tax). Warning at {money(billing.threshold)} {cur} or less.
+        </div>
+      </section>
+    </>
   );
 }

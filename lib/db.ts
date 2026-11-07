@@ -60,8 +60,26 @@ export async function migrate() {
       slug TEXT PRIMARY KEY,
       last_notified_at TEXT NOT NULL
     )`,
+    `CREATE TABLE IF NOT EXISTS account_platforms (
+      slug TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      external_id TEXT NOT NULL,
+      PRIMARY KEY (slug, platform)
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_insights_account_date ON daily_insights (account_id, date)`,
   ]);
+
+  // Per-client settings. NULL / default means "use the agency default".
+  const have = new Set((await db.execute("PRAGMA table_info(accounts)")).rows.map((c) => String(c.name)));
+  const add: [string, string][] = [
+    ["low_balance", "REAL"],
+    ["change_pct", "REAL"],
+    ["notify_visits", "INTEGER NOT NULL DEFAULT 1"],
+    ["monthly_budget", "REAL"],
+  ];
+  for (const [name, type] of add) {
+    if (!have.has(name)) await db.execute(`ALTER TABLE accounts ADD COLUMN ${name} ${type}`);
+  }
 }
 
 let ready: Promise<void> | undefined;

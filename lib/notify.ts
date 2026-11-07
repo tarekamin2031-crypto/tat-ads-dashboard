@@ -12,7 +12,7 @@ const money = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 
 export async function notifyVisit(account: Account, billing: Billing | null): Promise<void> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!botToken || !chatId) return;
+  if (!botToken || !chatId || !account.notify_visits) return;
 
   try {
     await ensureSchema();

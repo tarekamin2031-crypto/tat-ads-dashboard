@@ -26,7 +26,7 @@ export async function setLogo(slug: string, formData: FormData) {
   const logo = await logoFromForm(formData);
   if (!logo) redirect("/admin?error=Choose+an+image+file");
   await db.execute({ sql: "UPDATE accounts SET logo = ? WHERE slug = ?", args: [logo, slug] });
-  redirect("/admin");
+  redirect(`/admin/clients/${slug}?saved=logo`);
 }
 
 export async function addClient(formData: FormData) {
@@ -70,5 +70,5 @@ export async function resetPassword(slug: string, formData: FormData) {
     sql: "UPDATE accounts SET password_hash = ? WHERE slug = ?",
     args: [hashPassword(password), slug],
   });
-  redirect(`/admin?created=${slug}&pw=${encodeURIComponent(password)}`);
+  redirect(`/admin/clients/${slug}?created=1&pw=${encodeURIComponent(password)}`);
 }

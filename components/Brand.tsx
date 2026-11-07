@@ -1,34 +1,22 @@
-// TAT Agency look: teal -> navy gradient taken from the agency logo.
+// TAT Agency look: teal -> navy gradient taken from the agency logo. Styles live in globals.css.
 export const brand = {
   accent: "#0f766e",
   accentSoft: "#e3f2f0",
   gradient: "linear-gradient(110deg, #0b4a4d 0%, #0a3550 55%, #0a2a45 100%)",
 };
 
-const logoBox = { height: 44, borderRadius: 8, display: "block" } as const;
-
 export function BrandBar({ clientName, clientLogo }: { clientName?: string; clientLogo?: string | null }) {
   return (
-    <div style={{ background: brand.gradient, color: "#fff" }}>
-      <div
-        style={{
-          maxWidth: 1100,
-          margin: "0 auto",
-          padding: "12px 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-        }}
-      >
+    <div className="brandbar">
+      <div className="brandbar-in">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/tat-logo.png" alt="TAT Agency" style={{ ...logoBox, width: "auto" }} />
+        <img src="/tat-logo.png" alt="TAT Agency" className="brand-logo" />
         {clientName && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontWeight: 600, fontSize: 15 }}>{clientName}</span>
+          <div className="client">
+            <span className="client-name">{clientName}</span>
             {clientLogo && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={clientLogo} alt={clientName} style={{ ...logoBox, width: 44, objectFit: "cover" }} />
+              <img src={clientLogo} alt="" className="client-logo" />
             )}
           </div>
         )}
@@ -39,8 +27,30 @@ export function BrandBar({ clientName, clientLogo }: { clientName?: string; clie
 
 export function BrandFooter() {
   return (
-    <footer style={{ textAlign: "center", color: "#8a8d91", fontSize: 12, padding: "24px 0 32px", letterSpacing: 1 }}>
-      Powered by <strong style={{ color: brand.accent }}>TAT</strong> · Social Media Agency
+    <footer className="footer">
+      Powered by <strong>TAT</strong> · Social Media Agency
     </footer>
+  );
+}
+
+export function ClientHero({ name, logo, platform = "Meta Ads", children }: { name: string; logo?: string | null; platform?: string; children?: React.ReactNode }) {
+  return (
+    <section className="hero">
+      <div className="hero-in">
+        <div className="hero-id">
+          {logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logo} alt="" className="hero-logo" />
+          ) : (
+            <div className="hero-logo empty" aria-hidden>{name.slice(0, 1).toUpperCase()}</div>
+          )}
+          <div>
+            <div className="hero-eyebrow">Ads performance · {platform}</div>
+            <h1 className="hero-name">{name}</h1>
+          </div>
+        </div>
+        {children}
+      </div>
+    </section>
   );
 }

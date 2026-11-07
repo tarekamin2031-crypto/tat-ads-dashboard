@@ -4,7 +4,6 @@ import { db } from "./db";
 
 export type Alert = { scope: string; level: "bad" | "warn" | "good"; text: string };
 
-const THRESHOLD = 0.4; // flag moves of 40% or more versus the baseline
 const BASELINE_DAYS = 7;
 const MAX_SYNC_AGE_MS = 36 * 60 * 60 * 1000; // daily sync + slack for a late run
 const MIN_BASELINE_ACTIVE_DAYS = 3; // new/rarely-running campaigns have no "normal" yet
@@ -18,6 +17,7 @@ const money = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 
 // each campaign. Yesterday is the last complete day, same as the dashboard's presets.
 export async function getAlerts(account: Account): Promise<Alert[]> {
   const tz = account.timezone;
+  const threshold = account.change_pct;
   const yesterday = dateInTz(tz, 1);
   const baseFrom = dateInTz(tz, 1 + BASELINE_DAYS);
   const baseTo = dateInTz(tz, 2);
@@ -92,7 +92,7 @@ export async function getAlerts(account: Account): Promise<Alert[]> {
     }
 
     const spendChange = (y.spend - avgSpend) / avgSpend;
-    if (Math.abs(spendChange) >= THRESHOLD) {
+    if (Math.abs(spendChange) >= threshold) {
       alerts.push({
         scope: e.name,
         level: "warn",
@@ -110,9 +110,9 @@ export async function getAlerts(account: Account): Promise<Alert[]> {
       } else {
         const cpr = y.spend / y.results;
         const cprChange = (cpr - baseCpr) / baseCpr;
-        if (cprChange >= THRESHOLD) {
+        if (cprChange >= threshold) {
           alerts.push({ scope: e.name, level: "bad", text: `Cost per result up ${pct(cprChange)}: ${money(cpr)} ${cur} vs ~${money(baseCpr)} usual` });
-        } else if (cprChange <= -THRESHOLD) {
+        } else if (cprChange <= -threshold) {
           alerts.push({ scope: e.name, level: "good", text: `Cost per result down ${pct(cprChange)}: ${money(cpr)} ${cur} vs ~${money(baseCpr)} usual` });
         }
       }

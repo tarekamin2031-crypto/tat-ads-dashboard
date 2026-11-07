@@ -1,6 +1,6 @@
 import { listAccounts } from "../lib/accounts";
 import { ensureSchema } from "../lib/db";
-import { syncAccount } from "../lib/sync";
+import { syncAccount, syncOtherPlatforms } from "../lib/sync";
 
 async function main() {
   await ensureSchema();
@@ -15,6 +15,10 @@ async function main() {
   for (const acc of accounts) {
     try {
       console.log(await syncAccount(acc));
+      for (const note of await syncOtherPlatforms(acc)) {
+        console.log(note);
+        if (note.includes("FAILED")) failed++;
+      }
     } catch (e) {
       failed++;
       console.error(`${acc.name}: FAILED`, e);
