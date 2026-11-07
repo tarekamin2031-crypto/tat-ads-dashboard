@@ -22,7 +22,7 @@ export async function saveIntegration(id: string, formData: FormData) {
   const linked = await db.execute({ sql: "SELECT DISTINCT slug FROM account_platforms WHERE platform = ?", args: [id] });
   const slugs = new Set(linked.rows.map((r) => String(r.slug)));
   const notes: string[] = [];
-  for (const acc of (await listAccounts()).filter((a) => slugs.has(a.slug))) notes.push(...(await syncOtherPlatforms(acc)));
+  for (const acc of (await listAccounts()).filter((a) => slugs.has(a.slug))) notes.push(...(await syncOtherPlatforms(acc, true)));
   const failed = notes.find((n) => n.includes("FAILED"));
   if (failed) back(`error=${encodeURIComponent(`Saved, but the first data pull failed: ${failed}`)}`);
   back(`saved=${id}&pulled=${notes.length}&note=${encodeURIComponent(notes.join(" | ").slice(0, 600))}`);

@@ -83,7 +83,8 @@ const FETCHERS: Record<string, { label: string; fetch: (id: string, since: strin
   google: { label: "Google Ads", fetch: fetchGoogleInsights },
 };
 
-export async function syncOtherPlatforms(acc: Account): Promise<string[]> {
+// backfill: re-pull the full history (used right after credentials are saved, so new columns fill in for old days).
+export async function syncOtherPlatforms(acc: Account, backfill = false): Promise<string[]> {
   await loadCredentials();
   const linked = await db.execute({ sql: "SELECT platform, external_id FROM account_platforms WHERE slug = ?", args: [acc.slug] });
   const notes: string[] = [];
@@ -93,7 +94,7 @@ export async function syncOtherPlatforms(acc: Account): Promise<string[]> {
     if (!f || !platformReady(platform)) continue;
     const key = insightsKey(platform, String(r.external_id));
     const existing = await db.execute({ sql: "SELECT COUNT(*) AS n FROM daily_insights WHERE account_id = ?", args: [key] });
-    const firstRun = Number(existing.rows[0].n) === 0;
+    const firstRun = Number(existing.rows[0].n) === 0 || backfill;
     const since = dateInTz(acc.timezone, firstRun ? BACKFILL_DAYS : REFRESH_DAYS);
     const until = dateInTz(acc.timezone, 0);
     try {

@@ -120,26 +120,31 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
     FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}'
     AND campaign.advertising_channel_type IN ('PERFORMANCE_MAX', 'SMART', 'LOCAL')`);
   // Smart campaigns headline "call clicks" and "local actions" (directions, visits…). The API exposes them as
-  // all-conversions split by conversion category: phone calls are call clicks, the rest count as local actions.
+  // all-conversions split by conversion action, so they are told apart by the action's name and category:
+  // anything about calls is a call click; directions, map and engagement actions are local actions.
+  const isCall = (name: string, cat: string) => /call/i.test(name) || cat === "PHONE_CALL_LEAD";
+  const isLocal = (name: string, cat: string) => !isCall(name, cat) && (/direction|map|store|visit|engagement/i.test(name) || ["GET_DIRECTIONS", "ENGAGEMENT", "STORE_VISIT"].includes(cat));
   const perDay = new Map<string, { calls: number; local: number }>();
   const byCategory = new Map<string, number>();
   lastNote = "";
   if (flat.length > 0) {
     try {
-      const cats = await search(`SELECT segments.date, campaign.id, segments.conversion_action_category, metrics.all_conversions
+      const cats = await search(`SELECT segments.date, campaign.id, segments.conversion_action_name, segments.conversion_action_category, metrics.all_conversions
         FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}'
         AND campaign.advertising_channel_type IN ('PERFORMANCE_MAX', 'SMART', 'LOCAL')`);
       for (const r of cats) {
         const cat = String(r.segments?.conversionActionCategory ?? "UNKNOWN");
+        const name = String(r.segments?.conversionActionName ?? "");
         const n = num(r.metrics?.allConversions);
         const k = `${r.segments?.date}|${r.campaign?.id}`;
         const d = perDay.get(k) ?? { calls: 0, local: 0 };
-        if (cat === "PHONE_CALL_LEAD") d.calls += n;
-        else d.local += n;
+        if (isCall(name, cat)) d.calls += n;
+        else if (isLocal(name, cat)) d.local += n;
         perDay.set(k, d);
-        byCategory.set(cat, (byCategory.get(cat) ?? 0) + n);
+        const label = `${name || "?"} [${cat}]${isCall(name, cat) ? " → calls" : isLocal(name, cat) ? " → local" : " → ignored"}`;
+        byCategory.set(label, (byCategory.get(label) ?? 0) + n);
       }
-      lastNote = `all conversions by type: ${[...byCategory].sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} ${Math.round(n)}`).join(", ")}`;
+      lastNote = `all conversions by action: ${[...byCategory].sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} ${Math.round(n)}`).join(", ")}`;
     } catch (e) {
       lastNote = `could not read conversion types: ${(e as Error).message}`;
     }
