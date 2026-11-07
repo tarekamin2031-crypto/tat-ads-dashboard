@@ -155,7 +155,8 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
   // "Call clicks" in Google's overview is the campaign's phone-call metric, not the click-to-call conversion
   // action. Use it when the account reports any, otherwise fall back to the conversion-based count.
   const phoneTotal = flat.reduce((n, r) => n + num(r.metrics?.phoneCalls), 0);
-  if (flat.length > 0) lastNote += `${lastNote ? "; " : ""}phone_calls metric total: ${Math.round(phoneTotal)}`;
+  // Put the short figure first: the message shown to the admin is length-limited.
+  if (flat.length > 0) lastNote = `phone_calls metric total: ${Math.round(phoneTotal)}${lastNote ? `; ${lastNote}` : ""}`;
   for (const r of flat) {
     const row = toRow(r, `google:${r.campaign?.id}-campaign`, LABELS[String(r.campaign?.advertisingChannelType)] ?? "Campaign");
     const d = perDay.get(`${r.segments?.date}|${r.campaign?.id}`);
