@@ -33,7 +33,13 @@ export const ALL_CRED_NAMES = INTEGRATIONS.flatMap((i) => i.fields.map((f) => f.
 // hides once saved as a secret). Values saved earlier with SESSION_SECRET are still read and are re-encrypted
 // with the new key the next time the app loads them.
 const derive = (s: string) => createHash("sha256").update(`integrations:${s}`).digest();
-const primarySecret = () => process.env.INTEGRATIONS_KEY || process.env.SESSION_SECRET || "";
+// A key pasted from a terminal or a form often carries a trailing newline or space. Use the trimmed value,
+// and still accept data written with the raw value.
+const primarySecret = () => (process.env.INTEGRATIONS_KEY ? process.env.INTEGRATIONS_KEY.trim() : process.env.SESSION_SECRET || "");
+const rawVariants = () => {
+  const raw = process.env.INTEGRATIONS_KEY;
+  return raw && raw !== raw.trim() ? [raw] : [];
+};
 const legacySecret = () => process.env.SESSION_SECRET || "";
 export const credentialKeyConfigured = () => Boolean(primarySecret());
 const key = () => {
@@ -66,6 +72,10 @@ function decrypt(stored: string): { value: string; legacy: boolean } | null {
   if (!primarySecret()) return null;
   const v = decryptWith(key(), stored);
   if (v !== null) return { value: v, legacy: false };
+  for (const raw of rawVariants()) {
+    const r = decryptWith(derive(raw), stored);
+    if (r !== null) return { value: r, legacy: true }; // re-encrypt with the trimmed key
+  }
   if (legacySecret() && legacySecret() !== primarySecret()) {
     const old = decryptWith(derive(legacySecret()), stored);
     if (old !== null) return { value: old, legacy: true };
