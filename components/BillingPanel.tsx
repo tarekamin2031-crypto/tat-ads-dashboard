@@ -3,10 +3,10 @@ import { billingAlerts, TAX_RATE, type Billing } from "@/lib/billing";
 const money = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 0 });
 
 // Red banners shown at the very top of the page, before anything else.
-export function BillingAlerts({ billing }: { billing: Billing | null }) {
+export function BillingAlerts({ billing, scope = "Billing" }: { billing: Billing | null; scope?: string }) {
   return (
     <>
-      {billingAlerts(billing).map((a, i) => (
+      {billingAlerts(billing, scope).map((a, i) => (
         <div key={i} className="banner" role="alert">
           <span aria-hidden>⚠</span>
           <span>
@@ -36,7 +36,7 @@ export function BillingPanel({ billing }: { billing: Billing | null }) {
           <div>
             <div className="tile-label">Available balance</div>
             <div className={`billing-big${billing.low ? " low" : ""}`}>
-              {billing.available === null ? "No spending limit" : `${money(billing.available)} ${cur}`}
+              {billing.available === null ? billing.noLimitLabel ?? "No spending limit" : `${money(billing.available)} ${cur}`}
             </div>
           </div>
           {billing.cap !== null && (
@@ -83,7 +83,8 @@ export function BillingPanel({ billing }: { billing: Billing | null }) {
         </div>
 
         <div className="fine">
-          Net for ads = available balance ÷ {(1 + TAX_RATE).toFixed(2)} (14% VAT + 6% payment tax). Warning at {money(billing.threshold)} {cur} or less.
+          {billing.availableNet !== null && <>Net for ads = available balance ÷ {(1 + TAX_RATE).toFixed(2)} (14% VAT + 6% payment tax). </>}
+          {billing.available !== null ? <>Warning at {money(billing.threshold)} {cur} or less.</> : null}
         </div>
       </section>
     </>

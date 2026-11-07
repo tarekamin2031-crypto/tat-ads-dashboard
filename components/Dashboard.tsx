@@ -6,7 +6,7 @@ import { BrandBar, BrandFooter, ClientHero } from "@/components/Brand";
 import { CampaignTable, type Row } from "@/components/CampaignTable";
 import { DayChart, type Point } from "@/components/DayChart";
 import { PrintButton } from "@/components/PrintButton";
-import { billingAlerts, getBilling, TAX_RATE } from "@/lib/billing";
+import { billingAlerts, getBilling, getGoogleBilling, TAX_RATE } from "@/lib/billing";
 import { dateInTz, PRESET_DAYS, type Range } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { notifyVisit } from "@/lib/notify";
@@ -132,6 +132,7 @@ export async function Dashboard({
   tax?: boolean;
 }) {
   const isMeta = current.id === "meta";
+  const hasBilling = isMeta || current.id === "google";
   const taxOn = isMeta && tax;
   const k = taxOn ? 1 + TAX_RATE : 1;
   const tt = (r: Record<string, unknown>) => toTotals(r, k);
@@ -151,7 +152,7 @@ export async function Dashboard({
   // ad-set breakdown (campaign totals are summed from it), and the last-synced date. Fewer round
   // trips matters most on a remote database.
   const [billing, dailyRes, adsetRes, lastRes, monthRes] = await Promise.all([
-    getBilling(account),
+    current.id === "google" ? getGoogleBilling(account, current.key.replace(/^google:/, "")) : getBilling(account),
     db.execute({
       sql: `SELECT date, ${SUMS} FROM daily_insights WHERE account_id = ? AND date BETWEEN ? AND ? GROUP BY date`,
       args: [id, prevSince, until],
@@ -310,9 +311,9 @@ export async function Dashboard({
           <span className="hero-upd">Updated through {String(lastRes.rows[0]?.d ?? "n/a")}</span>
         </div>
       </ClientHero>
-      {isMeta && <AlertModal items={billingAlerts(billing).map((a) => a.text)} />}
+      {hasBilling && <AlertModal items={billingAlerts(billing, current.id === "google" ? "Google billing" : "Billing").map((a) => a.text)} />}
       <main className="wrap">
-        {isMeta && <BillingAlerts billing={billing} />}
+        {hasBilling && <BillingAlerts billing={billing} scope={current.id === "google" ? "Google billing" : "Billing"} />}
 
         {platforms.length > 1 && (
           <nav className="platform-tabs" aria-label="Platform">
@@ -458,7 +459,7 @@ export async function Dashboard({
           <DayChart title={`Cost per ${rn.one}`} subtitle={cur} data={cprPts} prev={prevCprs} kind="line" unit={cur} decimals={2} />
         </section>
 
-        {isMeta && (
+        {hasBilling && (
           <>
             <h2 className="section-title">Billing &amp; limit</h2>
             <BillingPanel billing={billing} />

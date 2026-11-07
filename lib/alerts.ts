@@ -15,7 +15,7 @@ const money = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 
 
 // Compares yesterday with the average of the 7 days before it, for the whole account and for
 // each campaign. Yesterday is the last complete day, same as the dashboard's presets.
-export async function getAlerts(account: Account): Promise<Alert[]> {
+export async function getAlerts(account: Account, key = account.ad_account_id, label = ""): Promise<Alert[]> {
   const tz = account.timezone;
   const threshold = account.change_pct;
   const yesterday = dateInTz(tz, 1);
@@ -25,12 +25,12 @@ export async function getAlerts(account: Account): Promise<Alert[]> {
   // Alerts compare against yesterday, so they are only meaningful if the sync has run recently.
   const log = await db.execute({
     sql: "SELECT synced_at FROM sync_log WHERE account_id = ?",
-    args: [account.ad_account_id],
+    args: [key],
   });
   const syncedAt = log.rows[0] ? Date.parse(String(log.rows[0].synced_at)) : NaN;
   if (!(Date.now() - syncedAt < MAX_SYNC_AGE_MS)) {
     const when = Number.isNaN(syncedAt) ? "No sync recorded yet" : `Last synced ${new Date(syncedAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
-    return [{ scope: "Data", level: "warn", text: `${when}. Performance alerts are paused until the next sync` }];
+    return [{ scope: label ? `${label} · Data` : "Data", level: "warn", text: `${when}. Performance alerts are paused until the next sync` }];
   }
 
   const { rows } = await db.execute({
@@ -39,7 +39,7 @@ export async function getAlerts(account: Account): Promise<Alert[]> {
           FROM daily_insights
           WHERE account_id = ? AND date BETWEEN ? AND ?
           GROUP BY date, campaign_id, campaign_name`,
-    args: [account.ad_account_id, baseFrom, yesterday],
+    args: [key, baseFrom, yesterday],
   });
 
   type Entity = { name: string; yesterday: Day; base: Day; activeDays: number };
@@ -120,5 +120,6 @@ export async function getAlerts(account: Account): Promise<Alert[]> {
   }
 
   const order = { bad: 0, warn: 1, good: 2 };
-  return alerts.sort((a, b) => order[a.level] - order[b.level]);
+  const labelled = label ? alerts.map((a) => ({ ...a, scope: `${label} · ${a.scope}` })) : alerts;
+  return labelled.sort((a, b) => order[a.level] - order[b.level]);
 }

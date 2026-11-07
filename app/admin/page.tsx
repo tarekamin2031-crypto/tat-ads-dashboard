@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { isMetaAccount, listAccounts, primaryPlatform } from "@/lib/accounts";
 import { getAlerts } from "@/lib/alerts";
 import { getAnalysis } from "@/lib/analysis";
-import { billingAlerts, getBilling, type Billing } from "@/lib/billing";
+import { billingAlerts, getBilling, getGoogleBilling, type Billing } from "@/lib/billing";
 import { formatCustomerId, listGoogleAccounts } from "@/lib/google";
 import { listAdAccounts } from "@/lib/meta";
 import { loadCredentials } from "@/lib/secrets";
@@ -10,7 +10,7 @@ import { BrandBar } from "@/components/Brand";
 import { requireAdmin } from "@/lib/admin";
 import { CopyLink } from "@/components/CopyLink";
 import { db } from "@/lib/db";
-import { platformById } from "@/lib/platforms";
+import { insightsKey, platformById, platformReady } from "@/lib/platforms";
 import { addClient } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ function BillingSummary({ b }: { b: Billing | null }) {
   if (!b) return <span className="chip muted">Billing unavailable</span>;
   const problem = b.low || b.statusCode !== 1;
   const main =
-    b.available === null ? "No spending limit" : `${b.low ? "⚠ " : ""}${fmt(b.available)} ${b.currency} available`;
+    b.available === null ? b.noLimitLabel ?? "No spending limit" : `${b.low ? "⚠ " : ""}${fmt(b.available)} ${b.currency} available`;
   const sub = [
     b.availableNet !== null ? `net ${fmt(b.availableNet)} after tax` : null,
     !b.isPrepay ? `due ${fmt(b.amountDue)}` : null,
@@ -46,10 +46,28 @@ export default async function AdminPage({
   const { created, pw, error } = await searchParams;
   await loadCredentials();
   const [accounts, adAccounts, googleAccounts, h] = await Promise.all([listAccounts(), listAdAccounts(), listGoogleAccounts(), headers()]);
+  // Google Ads customer id per client (only when Google credentials are set), for balance and alerts.
+  const googleIds = new Map<string, string>();
+  if (platformReady("google")) {
+    const rows = await db.execute("SELECT slug, external_id FROM account_platforms WHERE platform = 'google'");
+    for (const r of rows.rows) googleIds.set(String(r.slug), String(r.external_id));
+  }
   const clients = await Promise.all(
     accounts.map(async (a) => {
-      const [billing, performance, analysis] = await Promise.all([getBilling(a), getAlerts(a), getAnalysis(a).catch(() => null)]);
-      return { account: a, billing, alerts: [...billingAlerts(billing), ...performance], recs: analysis?.recs.filter((r) => r.level !== "info").length ?? 0, analysis };
+      const gid = googleIds.get(a.slug);
+      const googleKey = gid ? insightsKey("google", gid) : null;
+      const googleIsPrimary = googleKey === a.ad_account_id;
+      const [metaBilling, performance, analysis, googleBilling, googlePerf] = await Promise.all([
+        getBilling(a),
+        getAlerts(a),
+        getAnalysis(a).catch(() => null),
+        gid ? getGoogleBilling(a, gid.replace(/\D/g, "")) : Promise.resolve(null),
+        googleKey && !googleIsPrimary ? getAlerts(a, googleKey, "Google") : Promise.resolve([]),
+      ]);
+      // A Google-only client shows Google's balance in place of Meta's.
+      const billing = googleIsPrimary ? googleBilling : metaBilling;
+      const alerts = [...billingAlerts(metaBilling), ...billingAlerts(googleBilling, "Google billing"), ...performance, ...googlePerf];
+      return { account: a, billing, googleBilling: googleIsPrimary ? null : googleBilling, alerts, recs: analysis?.recs.filter((r) => r.level !== "info").length ?? 0, analysis };
     }),
   );
   const RANK = { bad: 0, warn: 1, good: 2 } as const;
@@ -109,7 +127,7 @@ export default async function AdminPage({
         <h2 className="section-title">Clients <span className="count">({clients.length})</span></h2>
         <div className="client-grid">
           {clients.length === 0 && <div className="card all-clear" style={{ color: "var(--muted)" }}>No clients yet. Add the first one below.</div>}
-          {clients.map(({ account: a, billing, recs, analysis, alerts }) => {
+          {clients.map(({ account: a, billing, googleBilling, recs, analysis, alerts }) => {
             const worst = alerts[0]?.level;
             const status = worst === "bad" ? ["Action", "bad"] : worst === "warn" ? ["Watch", "warn"] : ["Healthy", "good"];
             const nBad = alerts.filter((x) => x.level === "bad").length;
@@ -157,10 +175,20 @@ export default async function AdminPage({
                       </div>
                       <div className="cc-sub">of {fmt(billing.cap ?? 0)} limit{billing.availableNet !== null ? ` · net ${fmt(billing.availableNet)} after tax` : ""}{billing.statusCode !== 1 ? ` · ${billing.status}` : ""}</div>
                     </>
+                  ) : billing ? (
+                    <BillingSummary b={billing} />
                   ) : !isMetaAccount(a) ? (
                     <span className="chip">{platformById(primaryPlatform(a))?.label ?? primaryPlatform(a)} only</span>
                   ) : (
                     <BillingSummary b={billing} />
+                  )}
+                  {googleBilling && (
+                    <div className="cl-google">
+                      <span>Google Ads</span>
+                      <b className={googleBilling.low || googleBilling.statusCode !== 1 ? "low" : ""}>
+                        {googleBilling.statusCode !== 1 ? `⚠ ${googleBilling.status}` : googleBilling.available === null ? googleBilling.noLimitLabel ?? "No spending limit" : `${googleBilling.low ? "⚠ " : ""}${fmt(googleBilling.available)} ${googleBilling.currency} left`}
+                      </b>
+                    </div>
                   )}
                 </div>
 

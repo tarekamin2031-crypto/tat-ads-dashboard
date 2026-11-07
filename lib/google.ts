@@ -33,7 +33,8 @@ async function accessToken(): Promise<string> {
   return body.access_token;
 }
 
-export async function fetchGoogleInsights(customerId: string, since: string, until: string): Promise<InsightRow[]> {
+// Signs in and returns a function that runs GAQL queries against one customer account.
+async function makeSearch(customerId: string): Promise<{ id: string; search: (query: string) => Promise<any[]> }> {
   if (!googleConfigured()) throw new Error("Google Ads credentials are not set");
   const id = digits(customerId);
   const token = await accessToken();
@@ -84,6 +85,12 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
     } while (pageToken);
     return out;
   }
+
+  return { id, search };
+}
+
+export async function fetchGoogleInsights(customerId: string, since: string, until: string): Promise<InsightRow[]> {
+  const { id, search } = await makeSearch(customerId);
 
   const metrics = "metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions, metrics.conversions_value";
   const toRow = (r: any, adsetId: string, adsetName: string): InsightRow => {
@@ -271,3 +278,46 @@ export async function listGoogleAccounts(): Promise<GoogleAccountInfo[]> {
 }
 
 export const formatCustomerId = (id: string) => id.replace(/^(\d{3})(\d{3})(\d{4})$/, "$1-$2-$3");
+
+export type GoogleBillingInfo = {
+  currency: string;
+  customerStatus: string; // ENABLED, SUSPENDED, CANCELED...
+  setupStatus: string | null; // billing setup: APPROVED, PENDING, APPROVED_HELD, CANCELLED
+  paymentsAccount: string | null;
+  // Present only for accounts on monthly invoicing / account budgets. Card (automatic payments) accounts have none.
+  budget: { name: string; limit: number | null; served: number } | null;
+};
+
+// What Google Ads exposes about money: account status, billing setup and the account budget (if any).
+// Accounts that pay by card have no prepaid balance to read, so budget stays null for them.
+export async function fetchGoogleBilling(customerId: string): Promise<GoogleBillingInfo> {
+  const { search } = await makeSearch(customerId);
+  const c = (await search("SELECT customer.status, customer.currency_code FROM customer"))[0]?.customer ?? {};
+  let setupStatus: string | null = null;
+  let paymentsAccount: string | null = null;
+  let budget: GoogleBillingInfo["budget"] = null;
+  try {
+    const setups = await search("SELECT billing_setup.status, billing_setup.payments_account_info.payments_account_name, billing_setup.payments_account_info.payments_profile_name FROM billing_setup");
+    const pick = setups.find((r) => r.billingSetup?.status === "APPROVED") ?? setups[setups.length - 1];
+    if (pick) {
+      setupStatus = String(pick.billingSetup?.status ?? "") || null;
+      paymentsAccount = pick.billingSetup?.paymentsAccountInfo?.paymentsAccountName ?? pick.billingSetup?.paymentsAccountInfo?.paymentsProfileName ?? null;
+    }
+  } catch {
+    /* no billing access: leave unknown */
+  }
+  try {
+    const budgets = await search(`SELECT account_budget.status, account_budget.name, account_budget.approved_spending_limit_micros, account_budget.approved_spending_limit_type,
+      account_budget.adjusted_spending_limit_micros, account_budget.amount_served_micros FROM account_budget`);
+    const live = budgets.filter((r) => r.accountBudget?.status === "APPROVED");
+    const b = live[live.length - 1]?.accountBudget;
+    if (b) {
+      const infinite = b.approvedSpendingLimitType === "INFINITE";
+      const micros = b.adjustedSpendingLimitMicros ?? b.approvedSpendingLimitMicros;
+      budget = { name: String(b.name ?? ""), limit: infinite || micros === undefined ? null : num(micros) / 1_000_000, served: num(b.amountServedMicros) / 1_000_000 };
+    }
+  } catch {
+    /* no account budgets on this account */
+  }
+  return { currency: String(c.currencyCode ?? ""), customerStatus: String(c.status ?? "UNKNOWN"), setupStatus, paymentsAccount, budget };
+}
