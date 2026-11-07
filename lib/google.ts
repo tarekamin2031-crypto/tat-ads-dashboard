@@ -101,7 +101,9 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
       leads: num(m.conversions),
       purchases: 0,
       messages: 0,
-      purchase_value: num(m.conversionsValue),
+      // Google's conversion value is often a default amount per action (calls, directions), not revenue, so it is
+      // not shown as ROAS. Meta purchases are the only revenue figure we trust.
+      purchase_value: 0,
     };
   };
 
