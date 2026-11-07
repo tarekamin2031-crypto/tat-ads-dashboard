@@ -152,15 +152,40 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
       lastNote = `could not read conversion types: ${(e as Error).message}`;
     }
   }
-  // "Call clicks" in Google's overview is the campaign's phone-call metric, not the click-to-call conversion
-  // action. Use it when the account reports any, otherwise fall back to the conversion-based count.
+  // "Call clicks" in Google's overview are clicks on the call button: the campaign's clicks split by click type
+  // (PHONE_CALL_CLICK). The phone_calls metric and the click-to-call conversion action are other, smaller counts.
+  const callClicks = new Map<string, number>();
+  const byClickType = new Map<string, number>();
+  if (flat.length > 0) {
+    try {
+      const ct = await search(`SELECT segments.date, campaign.id, segments.click_type, metrics.clicks
+        FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}'
+        AND campaign.advertising_channel_type IN ('PERFORMANCE_MAX', 'SMART', 'LOCAL')`);
+      for (const r of ct) {
+        const type = String(r.segments?.clickType ?? "UNKNOWN");
+        const n = num(r.metrics?.clicks);
+        byClickType.set(type, (byClickType.get(type) ?? 0) + n);
+        if (type === "PHONE_CALL_CLICK") {
+          const k = `${r.segments?.date}|${r.campaign?.id}`;
+          callClicks.set(k, (callClicks.get(k) ?? 0) + n);
+        }
+      }
+    } catch (e) {
+      lastNote += `; could not read click types: ${(e as Error).message}`;
+    }
+  }
   const phoneTotal = flat.reduce((n, r) => n + num(r.metrics?.phoneCalls), 0);
-  // Put the short figure first: the message shown to the admin is length-limited.
-  if (flat.length > 0) lastNote = `phone_calls metric total: ${Math.round(phoneTotal)}${lastNote ? `; ${lastNote}` : ""}`;
+  const clickTotal = [...callClicks.values()].reduce((n, v) => n + v, 0);
+  // Put the short figures first: the message shown to the admin is length-limited.
+  if (flat.length > 0) {
+    const types = [...byClickType].sort((x, y) => y[1] - x[1]).map(([t, n]) => `${t} ${Math.round(n)}`).join(", ");
+    lastNote = `call clicks (PHONE_CALL_CLICK): ${Math.round(clickTotal)}; phone_calls metric: ${Math.round(phoneTotal)}; click types: ${types}${lastNote ? `; ${lastNote}` : ""}`;
+  }
   for (const r of flat) {
     const row = toRow(r, `google:${r.campaign?.id}-campaign`, LABELS[String(r.campaign?.advertisingChannelType)] ?? "Campaign");
-    const d = perDay.get(`${r.segments?.date}|${r.campaign?.id}`);
-    row.calls = phoneTotal > 0 ? num(r.metrics?.phoneCalls) : d ? d.calls : 0;
+    const key = `${r.segments?.date}|${r.campaign?.id}`;
+    const d = perDay.get(key);
+    row.calls = clickTotal > 0 ? callClicks.get(key) ?? 0 : phoneTotal > 0 ? num(r.metrics?.phoneCalls) : d ? d.calls : 0;
     row.local_actions = d ? d.local : 0;
     if (row.leads === 0) row.leads = row.calls;
     rows.push(row);
