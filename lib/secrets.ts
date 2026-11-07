@@ -29,10 +29,17 @@ export const INTEGRATIONS: { id: "tiktok" | "google"; label: string; intro: stri
 ];
 export const ALL_CRED_NAMES = INTEGRATIONS.flatMap((i) => i.fields.map((f) => f.name));
 
+// The key comes from INTEGRATIONS_KEY (so the GitHub sync can hold it without SESSION_SECRET, which Vercel
+// hides once saved as a secret). Values saved earlier with SESSION_SECRET are still read and are re-encrypted
+// with the new key the next time the app loads them.
+const derive = (s: string) => createHash("sha256").update(`integrations:${s}`).digest();
+const primarySecret = () => process.env.INTEGRATIONS_KEY || process.env.SESSION_SECRET || "";
+const legacySecret = () => process.env.SESSION_SECRET || "";
+export const credentialKeyConfigured = () => Boolean(primarySecret());
 const key = () => {
-  const s = process.env.SESSION_SECRET;
-  if (!s) throw new Error("SESSION_SECRET is required to store credentials");
-  return createHash("sha256").update(`integrations:${s}`).digest();
+  const s = primarySecret();
+  if (!s) throw new Error("INTEGRATIONS_KEY (or SESSION_SECRET) is required to store credentials");
+  return derive(s);
 };
 
 function encrypt(plain: string): string {
@@ -42,16 +49,28 @@ function encrypt(plain: string): string {
   return `v1:${iv.toString("base64")}:${c.getAuthTag().toString("base64")}:${enc.toString("base64")}`;
 }
 
-function decrypt(stored: string): string | null {
+function decryptWith(k: Buffer, stored: string): string | null {
   try {
     const [v, iv, tag, enc] = stored.split(":");
     if (v !== "v1") return null;
-    const d = createDecipheriv("aes-256-gcm", key(), Buffer.from(iv, "base64"));
+    const d = createDecipheriv("aes-256-gcm", k, Buffer.from(iv, "base64"));
     d.setAuthTag(Buffer.from(tag, "base64"));
     return Buffer.concat([d.update(Buffer.from(enc, "base64")), d.final()]).toString("utf8");
   } catch {
-    return null; // wrong SESSION_SECRET or damaged value: treat as not set
+    return null; // wrong key or damaged value: treat as not set
   }
+}
+
+// Returns the value and whether it was only readable with the legacy key (so it should be re-encrypted).
+function decrypt(stored: string): { value: string; legacy: boolean } | null {
+  if (!primarySecret()) return null;
+  const v = decryptWith(key(), stored);
+  if (v !== null) return { value: v, legacy: false };
+  if (legacySecret() && legacySecret() !== primarySecret()) {
+    const old = decryptWith(derive(legacySecret()), stored);
+    if (old !== null) return { value: old, legacy: true };
+  }
+  return null;
 }
 
 let overlay: Record<string, string> = {};
@@ -64,8 +83,13 @@ export async function loadCredentials(force = false) {
   const res = await db.execute("SELECT name, value FROM integration_credentials");
   const next: Record<string, string> = {};
   for (const r of res.rows) {
-    const v = decrypt(String(r.value));
-    if (v) next[String(r.name)] = v;
+    const d = decrypt(String(r.value));
+    if (!d) continue;
+    next[String(r.name)] = d.value;
+    if (d.legacy) {
+      // Move to the new key so the GitHub sync (which only has INTEGRATIONS_KEY) can read it too.
+      await db.execute({ sql: "UPDATE integration_credentials SET value = ? WHERE name = ?", args: [encrypt(d.value), String(r.name)] });
+    }
   }
   overlay = next;
   loadedAt = Date.now();

@@ -1,6 +1,6 @@
 import { BrandBar } from "@/components/Brand";
 import { requireAdmin } from "@/lib/admin";
-import { cred, credSource, INTEGRATIONS, loadCredentials, maskValue } from "@/lib/secrets";
+import { cred, credSource, credentialKeyConfigured, INTEGRATIONS, loadCredentials, maskValue } from "@/lib/secrets";
 import { removeIntegration, saveIntegration } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   await requireAdmin();
   await loadCredentials(true);
   const { saved, pulled, note, removed, error } = await searchParams;
-  const sessionSecretOk = Boolean(process.env.SESSION_SECRET);
+  const sessionSecretOk = credentialKeyConfigured();
 
   return (
     <>
@@ -27,11 +27,11 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         {error && <div className="notice err" role="alert">{error}</div>}
         {saved && <div className="notice ok" role="status">✓ Saved. {Number(pulled) > 0 ? `Pulled data for ${pulled} linked ${Number(pulled) === 1 ? "client" : "clients"}. ` : ""}The daily sync uses these automatically.{note && <><br /><small>{note}</small></>}</div>}
         {removed && <div className="notice ok" role="status">✓ Removed the saved credentials.</div>}
-        {!sessionSecretOk && <div className="notice err">SESSION_SECRET is not set, so credentials cannot be stored.</div>}
+        {!sessionSecretOk && <div className="notice err">Neither INTEGRATIONS_KEY nor SESSION_SECRET is set, so credentials cannot be stored.</div>}
 
         <p className="set-help" style={{ margin: "0 0 14px" }}>
           Values are stored encrypted in the database. The daily GitHub sync reads them from there, so nothing needs to be added to GitHub or Vercel except
-          <b> SESSION_SECRET</b> (same value in both) to decrypt them. Saved values are never shown again, only the last 4 characters.
+          <b> INTEGRATIONS_KEY</b> (a random string, same value in both) to decrypt them. Saved values are never shown again, only the last 4 characters.
         </p>
 
         <div className="set-stack">

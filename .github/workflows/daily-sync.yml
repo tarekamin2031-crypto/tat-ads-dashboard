@@ -20,5 +20,5 @@ jobs:
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}
-          # Same value as on Vercel. Needed to decrypt the platform credentials saved on the Integrations page.
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          # Same value as INTEGRATIONS_KEY on Vercel. Needed to decrypt the platform credentials saved on the Integrations page.
+          INTEGRATIONS_KEY: ${{ secrets.INTEGRATIONS_KEY }}

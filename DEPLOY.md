@@ -46,4 +46,4 @@ git push -u origin main
 
 ## ربط TikTok / Google Ads
 من `/admin/integrations` (زرار "Integrations" فوق) تلصق بيانات المنصة وتدوس "Save & pull data". بتتخزن مشفّرة في قاعدة البيانات، والـ sync اليومي في GitHub بيقراها من هناك.
-الشرط الوحيد: `SESSION_SECRET` لازم يتضاف كـ Secret في GitHub (Settings ← Secrets and variables ← Actions) بنفس قيمته في Vercel، عشان الـ sync يفك التشفير.
+الشرط الوحيد: `INTEGRATIONS_KEY` (نص عشوائي: `openssl rand -hex 32`) يتضاف بنفس القيمة في Vercel (Environment Variables) وفي GitHub (Settings ← Secrets and variables ← Actions)، عشان الـ sync يفك التشفير. لو كنت حافظت بيانات قبل كده بـ `SESSION_SECRET` بتتحوّل لوحدها أول ما تفتح أي صفحة بعد إضافة المفتاح.
