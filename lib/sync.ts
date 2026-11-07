@@ -3,7 +3,7 @@ import { dateInTz } from "./dates";
 import { db } from "./db";
 import { fetchCampaigns, fetchInsights, type InsightRow } from "./meta";
 import { insightsKey, platformReady } from "./platforms";
-import { fetchGoogleInsights } from "./google";
+import { fetchGoogleInsights, googleLastNote } from "./google";
 import { loadCredentials } from "./secrets";
 import { fetchTikTokInsights } from "./tiktok";
 
@@ -100,7 +100,7 @@ export async function syncOtherPlatforms(acc: Account): Promise<string[]> {
       const rows = await f.fetch(String(r.external_id), since, until);
       await storeInsights(key, rows);
       await db.execute({ sql: "INSERT OR REPLACE INTO sync_log (account_id, synced_at) VALUES (?, ?)", args: [key, new Date().toISOString()] });
-      notes.push(`${acc.name} [${f.label}]: ${since} -> ${until}${firstRun ? " (backfill)" : ""}, ${rows.length} daily rows`);
+      notes.push(`${acc.name} [${f.label}]: ${since} -> ${until}${firstRun ? " (backfill)" : ""}, ${rows.length} daily rows${platform === "google" && rows.length === 0 && googleLastNote() ? ` (${googleLastNote()})` : ""}`);
     } catch (e) {
       notes.push(`${acc.name} [${f.label}]: FAILED ${(e as Error).message}`);
     }

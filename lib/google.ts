@@ -114,8 +114,29 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
   const pmax = await search(`SELECT segments.date, campaign.id, campaign.name, ${metrics}
     FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}' AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'`);
   for (const r of pmax) rows.push(toRow(r, `google:${r.campaign?.id}-pmax`, "Performance Max"));
+
+  // An empty result is ambiguous (no spend, wrong account, or paused campaigns), so say what the account looks like.
+  lastNote = "";
+  if (rows.length === 0) {
+    try {
+      const info = (await search("SELECT customer.descriptive_name, customer.currency_code, customer.status FROM customer"))[0]?.customer;
+      const camps = await search("SELECT campaign.name, campaign.status, campaign.advertising_channel_type FROM campaign");
+      const by = (k: (c: any) => string) => {
+        const m = new Map<string, number>();
+        for (const c of camps) m.set(k(c.campaign ?? {}), (m.get(k(c.campaign ?? {})) ?? 0) + 1);
+        return [...m].map(([n, v]) => `${v} ${n}`).join(", ");
+      };
+      lastNote = `account "${info?.descriptiveName ?? id}" (${info?.currencyCode ?? "?"}, ${info?.status ?? "?"}) has ${camps.length} campaigns${camps.length ? ` [status: ${by((c) => c.status)}; type: ${by((c) => c.advertisingChannelType)}]` : ""} but none had activity in this period`;
+    } catch (e) {
+      lastNote = `could not describe the account: ${(e as Error).message}`;
+    }
+  }
   return rows;
 }
+
+let lastNote = "";
+// Extra detail about the latest empty pull, for the "Pulled data" message.
+export const googleLastNote = () => lastNote;
 
 // On a permission error, list the accounts the signed-in Google user can reach directly, so it is clear
 // whether the manager (MCC) or the client account is missing from that user's access.
