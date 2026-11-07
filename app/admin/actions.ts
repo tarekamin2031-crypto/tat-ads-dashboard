@@ -6,7 +6,7 @@ import { getAccount } from "@/lib/accounts";
 import { hashPassword } from "@/lib/auth";
 import { db, ensureSchema } from "@/lib/db";
 import { listAdAccounts } from "@/lib/meta";
-import { syncAccount } from "@/lib/sync";
+import { syncAccount, syncOtherPlatforms } from "@/lib/sync";
 
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -49,12 +49,25 @@ export async function addClient(formData: FormData) {
     args: [slug, displayName, adAccountId, meta.currency, meta.timezone_name, hashPassword(password), logo],
   });
 
+  // Optional Google Ads account picked in the form (must be one the agency's manager account can see).
+  const googleId = String(formData.get("google_customer_id") ?? "").replace(/\D/g, "");
+  if (googleId) {
+    await db.execute({
+      sql: `INSERT INTO account_platforms (slug, platform, external_id) VALUES (?, 'google', ?)
+            ON CONFLICT(slug, platform) DO UPDATE SET external_id = excluded.external_id`,
+      args: [slug, googleId],
+    });
+  }
+
   // Pull the first 90 days now so the client's dashboard is not empty until tomorrow's run.
   // If it fails (rate limit, timeout) the client is still added and the daily sync fills it in.
   const added = await getAccount(slug);
   let syncNote = "";
   try {
-    if (added) await syncAccount(added);
+    if (added) {
+      await syncAccount(added);
+      if (googleId) await syncOtherPlatforms(added);
+    }
   } catch (e) {
     console.error(`Initial sync failed for ${slug}`, e);
     syncNote = "&error=Client+added,+but+the+first+data+pull+failed.+It+will+retry+in+the+daily+sync.";

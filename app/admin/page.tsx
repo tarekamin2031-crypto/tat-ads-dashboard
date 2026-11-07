@@ -3,7 +3,9 @@ import { listAccounts } from "@/lib/accounts";
 import { getAlerts } from "@/lib/alerts";
 import { getAnalysis } from "@/lib/analysis";
 import { billingAlerts, getBilling, type Billing } from "@/lib/billing";
+import { formatCustomerId, listGoogleAccounts } from "@/lib/google";
 import { listAdAccounts } from "@/lib/meta";
+import { loadCredentials } from "@/lib/secrets";
 import { BrandBar } from "@/components/Brand";
 import { requireAdmin } from "@/lib/admin";
 import { CopyLink } from "@/components/CopyLink";
@@ -40,7 +42,8 @@ export default async function AdminPage({
 }) {
   await requireAdmin();
   const { created, pw, error } = await searchParams;
-  const [accounts, adAccounts, h] = await Promise.all([listAccounts(), listAdAccounts(), headers()]);
+  await loadCredentials();
+  const [accounts, adAccounts, googleAccounts, h] = await Promise.all([listAccounts(), listAdAccounts(), listGoogleAccounts(), headers()]);
   const clients = await Promise.all(
     accounts.map(async (a) => {
       const [billing, performance, analysis] = await Promise.all([getBilling(a), getAlerts(a), getAnalysis(a).catch(() => null)]);
@@ -245,6 +248,19 @@ export default async function AdminPage({
                   ))}
                 </select>
               </label>
+              {googleAccounts.length > 0 && (
+                <label className="f span2">
+                  <span>Google Ads account <em>optional</em></span>
+                  <select className="field" name="google_customer_id" defaultValue="">
+                    <option value="">None</option>
+                    {googleAccounts.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} · {formatCustomerId(g.id)}{g.currency ? ` (${g.currency})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className="f">
                 <span>Display name <em>optional</em></span>
                 <input className="field" name="name" placeholder="Shown to the client" />

@@ -6,6 +6,7 @@ import { CopyLink } from "@/components/CopyLink";
 import { getAccount } from "@/lib/accounts";
 import { db } from "@/lib/db";
 import { insightsKey, PLATFORMS, platformReady } from "@/lib/platforms";
+import { formatCustomerId, listGoogleAccounts } from "@/lib/google";
 import { loadCredentials } from "@/lib/secrets";
 import { resetPassword, setLogo } from "../../actions";
 import { saveAlerts, saveBudget, saveDetails, saveNotifications, savePlatform } from "./actions";
@@ -31,6 +32,7 @@ export default async function ClientSettings({
 }) {
   await requireAdmin();
   await loadCredentials();
+  const googleAccounts = await listGoogleAccounts();
   const { slug } = await params;
   const { saved, error, created, pw } = await searchParams;
   const a = await getAccount(slug);
@@ -185,6 +187,13 @@ export default async function ClientSettings({
         <section className="card set-card" id="platforms">
           <h2>Platforms</h2>
           <p className="set-help">Meta, TikTok and Google Ads pull data automatically once their credentials are saved under <a href="/admin/integrations">Integrations</a>. Snapchat stores the ID until its integration is switched on.</p>
+          {googleAccounts.length > 0 && (
+            <datalist id="google-accounts">
+              {googleAccounts.map((g) => (
+                <option key={g.id} value={formatCustomerId(g.id)}>{g.name}{g.currency ? ` (${g.currency})` : ""}</option>
+              ))}
+            </datalist>
+          )}
           <ul className="plat-list">
             {PLATFORMS.map((p) =>
               p.id === "meta" ? (
@@ -197,7 +206,7 @@ export default async function ClientSettings({
                 <li key={p.id} className="plat">
                   <div className="plat-name">{p.label}</div>
                   <form action={savePlatform.bind(null, slug, p.id)} className="row grow">
-                    <input className="field" name="external_id" defaultValue={ids.get(p.id) ?? ""} placeholder={`${p.idLabel} (${p.placeholder})`} aria-label={`${p.label} ${p.idLabel}`} autoComplete="off" />
+                    <input className="field" name="external_id" list={p.id === "google" ? "google-accounts" : undefined} defaultValue={ids.get(p.id) ?? ""} placeholder={`${p.idLabel} (${p.placeholder})`} aria-label={`${p.label} ${p.idLabel}`} autoComplete="off" />
                     <button className="btn ghost small" type="submit">Save</button>
                   </form>
                   {pulledInfo.has(p.id) && p.hasAdapter && platformReady(p.id) && (

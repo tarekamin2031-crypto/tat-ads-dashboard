@@ -122,3 +122,44 @@ async function accessHint(version: string, token: string, customerId: string, lo
     return "";
   }
 }
+
+export type GoogleAccountInfo = { id: string; name: string; currency: string };
+let accountsCache: { at: number; list: GoogleAccountInfo[] } | null = null;
+
+// Client accounts under the agency's manager (MCC), for the "pick an account" lists. Returns [] when
+// Google Ads is not set up or the call fails, so the pages simply hide the list.
+export async function listGoogleAccounts(): Promise<GoogleAccountInfo[]> {
+  const login = digits(cred("GOOGLE_ADS_LOGIN_CUSTOMER_ID"));
+  if (!googleConfigured() || !login) return [];
+  if (accountsCache && Date.now() - accountsCache.at < 5 * 60_000) return accountsCache.list;
+  try {
+    const token = await accessToken();
+    const query = `SELECT customer_client.id, customer_client.descriptive_name, customer_client.currency_code, customer_client.manager, customer_client.status
+      FROM customer_client WHERE customer_client.status = 'ENABLED'`;
+    let res: Response | null = null;
+    for (const v of workingVersion ? [workingVersion] : VERSIONS) {
+      res = await fetch(`https://googleads.googleapis.com/${v}/customers/${login}/googleAds:search`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "developer-token": cred("GOOGLE_ADS_DEVELOPER_TOKEN"), "login-customer-id": login, "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      if (res.status !== 404) {
+        workingVersion = v;
+        break;
+      }
+    }
+    const body: any = res && (await res.json().catch(() => null));
+    if (!res || !res.ok || !body) return [];
+    const list: GoogleAccountInfo[] = (body.results ?? [])
+      .map((r: any) => r.customerClient)
+      .filter((c: any) => c && !c.manager)
+      .map((c: any) => ({ id: String(c.id), name: String(c.descriptiveName ?? `Account ${c.id}`), currency: String(c.currencyCode ?? "") }))
+      .sort((a: GoogleAccountInfo, b: GoogleAccountInfo) => a.name.localeCompare(b.name));
+    accountsCache = { at: Date.now(), list };
+    return list;
+  } catch {
+    return [];
+  }
+}
+
+export const formatCustomerId = (id: string) => id.replace(/^(\d{3})(\d{3})(\d{4})$/, "$1-$2-$3");
