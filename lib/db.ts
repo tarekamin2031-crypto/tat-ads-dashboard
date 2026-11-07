@@ -89,6 +89,11 @@ export async function migrate() {
   for (const [name, type] of add) {
     if (!have.has(name)) await db.execute(`ALTER TABLE accounts ADD COLUMN ${name} ${type}`);
   }
+  // Platform-specific counts (Google Smart campaigns report call clicks and local actions).
+  const haveIns = new Set((await db.execute("PRAGMA table_info(daily_insights)")).rows.map((c) => String(c.name)));
+  for (const name of ["calls", "local_actions"]) {
+    if (!haveIns.has(name)) await db.execute(`ALTER TABLE daily_insights ADD COLUMN ${name} REAL NOT NULL DEFAULT 0`);
+  }
 }
 
 let ready: Promise<void> | undefined;

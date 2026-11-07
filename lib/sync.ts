@@ -12,7 +12,7 @@ const REFRESH_DAYS = 7; // Meta revises recent numbers, so re-pull the last week
 
 const COLS = [
   "date", "account_id", "campaign_id", "campaign_name", "adset_id", "adset_name", "spend", "impressions", "reach",
-  "clicks", "leads", "purchases", "messages", "purchase_value",
+  "clicks", "leads", "purchases", "messages", "purchase_value", "calls", "local_actions",
 ] as const;
 
 export async function syncAccount(acc: Account): Promise<string> {
@@ -43,10 +43,10 @@ export async function syncAccount(acc: Account): Promise<string> {
   for (let i = 0; i < insights.length; i += BATCH) {
     await db.batch(
       insights.slice(i, i + BATCH).map((r) => {
-        const row: Record<string, string | number> = { ...r, account_id: acc.ad_account_id };
+        const row: Record<string, string | number | undefined> = { ...r, account_id: acc.ad_account_id };
         return {
           sql: `INSERT OR REPLACE INTO daily_insights (${COLS.join(",")}) VALUES (${COLS.map(() => "?").join(",")})`,
-          args: COLS.map((c) => row[c]),
+          args: COLS.map((c) => row[c] ?? 0),
         };
       }),
     );
@@ -66,10 +66,10 @@ async function storeInsights(key: string, insights: InsightRow[]) {
   for (let i = 0; i < insights.length; i += BATCH) {
     await db.batch(
       insights.slice(i, i + BATCH).map((r) => {
-        const row: Record<string, string | number> = { ...r, account_id: key };
+        const row: Record<string, string | number | undefined> = { ...r, account_id: key };
         return {
           sql: `INSERT OR REPLACE INTO daily_insights (${COLS.join(",")}) VALUES (${COLS.map(() => "?").join(",")})`,
-          args: COLS.map((c) => row[c]),
+          args: COLS.map((c) => row[c] ?? 0),
         };
       }),
     );
@@ -100,7 +100,7 @@ export async function syncOtherPlatforms(acc: Account): Promise<string[]> {
       const rows = await f.fetch(String(r.external_id), since, until);
       await storeInsights(key, rows);
       await db.execute({ sql: "INSERT OR REPLACE INTO sync_log (account_id, synced_at) VALUES (?, ?)", args: [key, new Date().toISOString()] });
-      notes.push(`${acc.name} [${f.label}]: ${since} -> ${until}${firstRun ? " (backfill)" : ""}, ${rows.length} daily rows${platform === "google" && rows.length === 0 && googleLastNote() ? ` (${googleLastNote()})` : ""}`);
+      notes.push(`${acc.name} [${f.label}]: ${since} -> ${until}${firstRun ? " (backfill)" : ""}, ${rows.length} daily rows${platform === "google" && googleLastNote() ? ` (${googleLastNote()})` : ""}`);
     } catch (e) {
       notes.push(`${acc.name} [${f.label}]: FAILED ${(e as Error).message}`);
     }

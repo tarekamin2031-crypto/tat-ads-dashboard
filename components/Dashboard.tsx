@@ -19,6 +19,8 @@ type Totals = {
   purchases: number;
   messages: number;
   purchase_value: number;
+  calls: number;
+  local_actions: number;
 };
 
 const num = (v: unknown) => Number(v ?? 0);
@@ -48,12 +50,14 @@ function toTotals(r: Record<string, unknown>, k = 1): Totals {
     purchases: num(r.purchases),
     messages: num(r.messages),
     purchase_value: num(r.purchase_value),
+    calls: num(r.calls),
+    local_actions: num(r.local_actions),
   };
 }
 
 const SUMS = `SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(clicks) AS clicks,
   SUM(leads) AS leads, SUM(purchases) AS purchases, SUM(messages) AS messages,
-  SUM(purchase_value) AS purchase_value`;
+  SUM(purchase_value) AS purchase_value, SUM(calls) AS calls, SUM(local_actions) AS local_actions`;
 
 const addDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 const eachDate = (from: string, to: string) => {
@@ -173,6 +177,7 @@ export async function Dashboard({
       const x = tt(r);
       t.spend += x.spend; t.impressions += x.impressions; t.clicks += x.clicks; t.leads += x.leads;
       t.purchases += x.purchases; t.messages += x.messages; t.purchase_value += x.purchase_value;
+      t.calls += x.calls; t.local_actions += x.local_actions;
     }
     return t;
   };
@@ -360,12 +365,25 @@ export async function Dashboard({
         )}
         <p className="summary">{summary.join(" ")}</p>
 
+        {current.id === "google" && (
+          // Google (Smart campaigns especially) is judged on reach and actions, like Google Ads' own overview.
+          <section className="tiles" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }} aria-label="Key numbers">
+            <Tile label={`Spend (${cur})`} value={money0(total.spend)} cur={total.spend} prev={prev.spend} goodWhenUp={null} days={len} spark={spendPts.map((p) => p.value)} />
+            <Tile label="Impressions" value={int(total.impressions)} cur={total.impressions} prev={prev.impressions} goodWhenUp={true} days={len} spark={series.map((s) => s.impressions)} />
+            <Tile label="Clicks" value={int(total.clicks)} cur={total.clicks} prev={prev.clicks} goodWhenUp={true} days={len} spark={series.map((s) => s.clicks)} />
+            {total.local_actions > 0 && <Tile label="Local actions" value={int(total.local_actions)} cur={total.local_actions} prev={prev.local_actions} goodWhenUp={true} days={len} spark={series.map((s) => s.local_actions)} />}
+            {total.calls > 0 && <Tile label="Call clicks" value={int(total.calls)} cur={total.calls} prev={prev.calls} goodWhenUp={true} days={len} spark={series.map((s) => s.calls)} />}
+          </section>
+        )}
+
+        {current.id !== "google" && (
         <section className={`tiles${showRoas ? " four" : ""}`} aria-label="Key numbers">
           <Tile label={`Spend${taxOn ? " incl. tax" : ""} (${cur})`} value={money0(total.spend)} cur={total.spend} prev={prev.spend} goodWhenUp={null} days={len} spark={spendPts.map((p) => p.value)} />
           <Tile label={rn.label} value={int(results(total))} cur={results(total)} prev={results(prev)} goodWhenUp={true} days={len} spark={resultPts.map((p) => p.value)} />
           <Tile label={`Cost per ${rn.one} (${cur})`} value={cpr === null ? "-" : money(cpr)} cur={cpr} prev={prevCpr} goodWhenUp={false} days={len} spark={cprPts.map((p) => p.value)} />
           {showRoas && <Tile label="ROAS" value={roas.toFixed(2)} cur={roas} prev={prevRoas} goodWhenUp={true} days={len} spark={series.map((s) => (s.spend ? s.purchase_value / s.spend : null))} />}
         </section>
+        )}
 
         {pace && (
           <section className="card pace" aria-label="Monthly budget pacing">
@@ -389,8 +407,17 @@ export async function Dashboard({
 
         <section className="mini-tiles" aria-label="More numbers">
           {isMeta && !taxOn && <div className="mini"><span>Spend incl. tax (+{Math.round(TAX_RATE * 100)}%)</span><b>{money0(total.spend * (1 + TAX_RATE))} {cur}</b></div>}
-          <div className="mini"><span>Impressions</span><b>{int(total.impressions)}</b></div>
-          <div className="mini"><span>Clicks</span><b>{int(total.clicks)}</b></div>
+          {current.id === "google" ? (
+            <>
+              <div className="mini"><span>{rn.label === "Results" ? "Conversions" : rn.label}</span><b>{int(results(total))}</b></div>
+              <div className="mini"><span>Cost per conversion</span><b>{cpr === null ? "-" : money(cpr)} {cpr === null ? "" : cur}</b></div>
+            </>
+          ) : (
+            <>
+              <div className="mini"><span>Impressions</span><b>{int(total.impressions)}</b></div>
+              <div className="mini"><span>Clicks</span><b>{int(total.clicks)}</b></div>
+            </>
+          )}
           <div className="mini"><span>CTR</span><b>{ctr.toFixed(2)}%</b></div>
           <div className="mini"><span>CPM</span><b>{total.impressions ? money((total.spend / total.impressions) * 1000) : "-"}</b></div>
           <div className="mini"><span>CPC</span><b>{total.clicks ? money(total.spend / total.clicks) : "-"}</b></div>

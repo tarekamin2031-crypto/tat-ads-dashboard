@@ -14,6 +14,8 @@ export type InsightRow = {
   purchases: number;
   messages: number;
   purchase_value: number;
+  calls?: number; // Google Smart campaigns: call clicks
+  local_actions?: number; // Google Smart campaigns: directions, visits and similar
 };
 
 export type CampaignInfo = { id: string; name: string; status: string; objective: string };

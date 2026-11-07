@@ -119,14 +119,41 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
   const flat = await search(`SELECT segments.date, campaign.id, campaign.name, campaign.advertising_channel_type, ${metrics}, metrics.phone_calls
     FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}'
     AND campaign.advertising_channel_type IN ('PERFORMANCE_MAX', 'SMART', 'LOCAL')`);
+  // Smart campaigns headline "call clicks" and "local actions" (directions, visits…). The API exposes them as
+  // all-conversions split by conversion category: phone calls are call clicks, the rest count as local actions.
+  const perDay = new Map<string, { calls: number; local: number }>();
+  const byCategory = new Map<string, number>();
+  lastNote = "";
+  if (flat.length > 0) {
+    try {
+      const cats = await search(`SELECT segments.date, campaign.id, segments.conversion_action_category, metrics.all_conversions
+        FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}'
+        AND campaign.advertising_channel_type IN ('PERFORMANCE_MAX', 'SMART', 'LOCAL')`);
+      for (const r of cats) {
+        const cat = String(r.segments?.conversionActionCategory ?? "UNKNOWN");
+        const n = num(r.metrics?.allConversions);
+        const k = `${r.segments?.date}|${r.campaign?.id}`;
+        const d = perDay.get(k) ?? { calls: 0, local: 0 };
+        if (cat === "PHONE_CALL_LEAD") d.calls += n;
+        else d.local += n;
+        perDay.set(k, d);
+        byCategory.set(cat, (byCategory.get(cat) ?? 0) + n);
+      }
+      lastNote = `all conversions by type: ${[...byCategory].sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} ${Math.round(n)}`).join(", ")}`;
+    } catch (e) {
+      lastNote = `could not read conversion types: ${(e as Error).message}`;
+    }
+  }
   for (const r of flat) {
     const row = toRow(r, `google:${r.campaign?.id}-campaign`, LABELS[String(r.campaign?.advertisingChannelType)] ?? "Campaign");
-    if (row.leads === 0) row.leads = num(r.metrics?.phoneCalls);
+    const d = perDay.get(`${r.segments?.date}|${r.campaign?.id}`);
+    row.calls = d ? d.calls : num(r.metrics?.phoneCalls);
+    row.local_actions = d ? d.local : 0;
+    if (row.leads === 0) row.leads = row.calls;
     rows.push(row);
   }
 
   // An empty result is ambiguous (no spend, wrong account, or paused campaigns), so say what the account looks like.
-  lastNote = "";
   if (rows.length === 0) {
     try {
       const info = (await search("SELECT customer.descriptive_name, customer.currency_code, customer.status FROM customer"))[0]?.customer;
