@@ -153,7 +153,7 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
     }
   }
   // "Call clicks" in Google's overview are clicks on the call button: the campaign's clicks split by click type
-  // (PHONE_CALL_CLICK). The phone_calls metric and the click-to-call conversion action are other, smaller counts.
+  // ("CALLS" in the API; older accounts report PHONE_CALL_CLICK). The phone_calls metric and the click-to-call conversion action are other, smaller counts.
   const callClicks = new Map<string, number>();
   const byClickType = new Map<string, number>();
   if (flat.length > 0) {
@@ -165,7 +165,7 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
         const type = String(r.segments?.clickType ?? "UNKNOWN");
         const n = num(r.metrics?.clicks);
         byClickType.set(type, (byClickType.get(type) ?? 0) + n);
-        if (type === "PHONE_CALL_CLICK") {
+        if (type === "CALLS" || type === "PHONE_CALL_CLICK") {
           const k = `${r.segments?.date}|${r.campaign?.id}`;
           callClicks.set(k, (callClicks.get(k) ?? 0) + n);
         }
@@ -179,7 +179,7 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
   // Put the short figures first: the message shown to the admin is length-limited.
   if (flat.length > 0) {
     const types = [...byClickType].sort((x, y) => y[1] - x[1]).map(([t, n]) => `${t} ${Math.round(n)}`).join(", ");
-    lastNote = `call clicks (PHONE_CALL_CLICK): ${Math.round(clickTotal)}; phone_calls metric: ${Math.round(phoneTotal)}; click types: ${types}${lastNote ? `; ${lastNote}` : ""}`;
+    lastNote = `call clicks (CALLS click type): ${Math.round(clickTotal)}; phone_calls metric: ${Math.round(phoneTotal)}; click types: ${types}${lastNote ? `; ${lastNote}` : ""}`;
   }
   for (const r of flat) {
     const row = toRow(r, `google:${r.campaign?.id}-campaign`, LABELS[String(r.campaign?.advertisingChannelType)] ?? "Campaign");
