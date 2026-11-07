@@ -110,10 +110,18 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
     FROM ad_group WHERE segments.date BETWEEN '${since}' AND '${until}'`);
   const rows = groups.map((r) => toRow(r, `google:${r.adGroup?.id}`, String(r.adGroup?.name ?? "Ad group")));
 
-  // Performance Max has no ad groups, so it is read at campaign level (one row per campaign per day).
-  const pmax = await search(`SELECT segments.date, campaign.id, campaign.name, ${metrics}
-    FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}' AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'`);
-  for (const r of pmax) rows.push(toRow(r, `google:${r.campaign?.id}-pmax`, "Performance Max"));
+  // Performance Max, Smart and Local campaigns have no usable ad groups, so they are read at campaign level
+  // (one row per campaign per day). Smart campaigns report phone calls rather than conversions, so calls
+  // stand in for results when no conversions are recorded.
+  const LABELS: Record<string, string> = { PERFORMANCE_MAX: "Performance Max", SMART: "Smart campaign", LOCAL: "Local campaign" };
+  const flat = await search(`SELECT segments.date, campaign.id, campaign.name, campaign.advertising_channel_type, ${metrics}, metrics.phone_calls
+    FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}'
+    AND campaign.advertising_channel_type IN ('PERFORMANCE_MAX', 'SMART', 'LOCAL')`);
+  for (const r of flat) {
+    const row = toRow(r, `google:${r.campaign?.id}-campaign`, LABELS[String(r.campaign?.advertisingChannelType)] ?? "Campaign");
+    if (row.leads === 0) row.leads = num(r.metrics?.phoneCalls);
+    rows.push(row);
+  }
 
   // An empty result is ambiguous (no spend, wrong account, or paused campaigns), so say what the account looks like.
   lastNote = "";
