@@ -78,7 +78,9 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
     }
     if (!res.ok || !body) {
       const msg = body?.error?.details?.[0]?.errors?.[0]?.message ?? body?.error?.message ?? `HTTP ${res.status} ${text.slice(0, 160)}`;
-      throw new Error(`Google Ads report failed: ${msg}`);
+      let hint = "";
+      if (res.status === 403) hint = await accessHint(workingVersion ?? VERSIONS[0], token, id, login);
+      throw new Error(`Google Ads report failed: ${msg}${hint}`);
     }
     for (const r of body.results ?? []) {
       const m = r.metrics ?? {};
@@ -101,4 +103,22 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
     pageToken = body.nextPageToken || undefined;
   } while (pageToken);
   return rows;
+}
+
+// On a permission error, list the accounts the signed-in Google user can reach directly, so it is clear
+// whether the manager (MCC) or the client account is missing from that user's access.
+async function accessHint(version: string, token: string, customerId: string, loginId: string): Promise<string> {
+  try {
+    const res = await fetch(`https://googleads.googleapis.com/${version}/customers:listAccessibleCustomers`, {
+      headers: { Authorization: `Bearer ${token}`, "developer-token": cred("GOOGLE_ADS_DEVELOPER_TOKEN") },
+    });
+    const body = await res.json().catch(() => null);
+    const ids: string[] = (body?.resourceNames ?? []).map((n: string) => n.replace("customers/", ""));
+    if (!res.ok || !body) return ` [Could not list accessible accounts: HTTP ${res.status}]`;
+    const fmt = (v: string) => v.replace(/^(\d{3})(\d{3})(\d{4})$/, "$1-$2-$3");
+    const has = (v: string) => ids.includes(v);
+    return ` [Signed-in Google user can access: ${ids.length ? ids.map(fmt).join(", ") : "no accounts"}. Manager ${loginId ? fmt(loginId) : "(not set)"} ${loginId ? (has(loginId) ? "is" : "is NOT") : ""} in that list; client ${fmt(customerId)} ${has(customerId) ? "is" : "is not"} listed directly (clients under a manager normally are not).]`;
+  } catch {
+    return "";
+  }
 }
