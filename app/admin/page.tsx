@@ -173,7 +173,7 @@ export default async function AdminPage({
                       <div className="cl-bar" role="img" aria-label={`${Math.round(pctLeft)}% of the spending limit left`}>
                         <i className={billing.low ? "low" : ""} style={{ width: `${pctLeft}%` }} />
                       </div>
-                      <div className="cc-sub">of {fmt(billing.cap ?? 0)} limit{billing.availableNet !== null ? ` · net ${fmt(billing.availableNet)} after tax` : ""}{billing.statusCode !== 1 ? ` · ${billing.status}` : ""}</div>
+                      <div className="cc-sub">of {fmt(billing.cap ?? 0)} limit{billing.availableNet !== null ? ` · net ${fmt(billing.availableNet)} after tax` : ""}{billing.availableGross != null ? ` · ${fmt(billing.availableGross)} incl. tax` : ""}{billing.statusCode !== 1 ? ` · ${billing.status}` : ""}</div>
                     </>
                   ) : billing ? (
                     <BillingSummary b={billing} />

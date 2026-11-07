@@ -66,6 +66,12 @@ export function BillingPanel({ billing }: { billing: Billing | null }) {
               <b>{money(billing.availableNet)} {cur}</b>
             </div>
           )}
+          {billing.availableGross != null && (
+            <div className="kv">
+              <span>Including tax (+{Math.round(TAX_RATE * 100)}%)</span>
+              <b>{money(billing.availableGross)} {cur}</b>
+            </div>
+          )}
           {!billing.isPrepay && (
             <div className="kv">
               <span>Amount due now</span>
@@ -84,6 +90,7 @@ export function BillingPanel({ billing }: { billing: Billing | null }) {
 
         <div className="fine">
           {billing.availableNet !== null && <>Net for ads = available balance ÷ {(1 + TAX_RATE).toFixed(2)} (14% VAT + 6% payment tax). </>}
+          {billing.availableGross != null && <>Including tax = available balance × {(1 + TAX_RATE).toFixed(2)}. </>}
           {billing.available !== null ? <>Warning at {money(billing.threshold)} {cur} or less.</> : null}
         </div>
       </section>

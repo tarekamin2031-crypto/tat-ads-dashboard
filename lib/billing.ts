@@ -30,6 +30,7 @@ export type Billing = {
   funding: string;
   low: boolean;
   threshold: number; // per-client "low balance" limit
+  availableGross?: number | null; // available × (1 + tax): the same balance including tax (Google)
   noLimitLabel?: string; // shown instead of "No spending limit" (e.g. Google card accounts have no balance)
 };
 
@@ -110,7 +111,9 @@ export async function getGoogleBilling(account: Account, customerId: string): Pr
       spent,
       cap,
       available,
-      availableNet: null,
+      // Google reports the balance as is; show it both net of the 20% tax and including it.
+      availableNet: available === null ? null : available / (1 + TAX_RATE),
+      availableGross: available === null ? null : available * (1 + TAX_RATE),
       amountDue: 0,
       funding: g.budget ? `Account budget${g.budget.name ? ` (${g.budget.name})` : ""}` : g.paymentsAccount ? `${g.paymentsAccount} (automatic payments)` : "Automatic payments",
       low: false,
