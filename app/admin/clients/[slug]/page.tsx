@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { BrandBar } from "@/components/Brand";
+import { requireAdmin } from "@/lib/admin";
 import { CopyLink } from "@/components/CopyLink";
 import { getAccount } from "@/lib/accounts";
 import { db } from "@/lib/db";
@@ -27,6 +28,7 @@ export default async function ClientSettings({
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ saved?: string; error?: string; created?: string; pw?: string }>;
 }) {
+  await requireAdmin();
   const { slug } = await params;
   const { saved, error, created, pw } = await searchParams;
   const a = await getAccount(slug);
@@ -42,7 +44,7 @@ export default async function ClientSettings({
 
   return (
     <>
-      <BrandBar />
+      <BrandBar admin />
       <main className="wrap narrow">
         <a className="back" href="/admin">← All clients</a>
         <header className="settings-head">

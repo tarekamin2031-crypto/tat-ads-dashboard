@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { BrandBar } from "@/components/Brand";
+import { requireAdmin } from "@/lib/admin";
 import { getAccount } from "@/lib/accounts";
 import { getAnalysis, type Level } from "@/lib/analysis";
 
@@ -12,6 +13,7 @@ const PILL: Record<Level, string> = { bad: "bad", warn: "warn", good: "good", in
 const change = (c: number | null, p: number | null) => (c === null || p === null || p === 0 ? null : ((c - p) / p) * 100);
 
 export default async function AnalysisPage({ params }: { params: Promise<{ slug: string }> }) {
+  await requireAdmin();
   const { slug } = await params;
   const a = await getAccount(slug);
   if (!a) notFound();
@@ -28,7 +30,7 @@ export default async function AnalysisPage({ params }: { params: Promise<{ slug:
 
   return (
     <>
-      <BrandBar />
+      <BrandBar admin />
       <main className="wrap narrow">
         <a className="back" href={`/admin/clients/${slug}`}>← {a.name} settings</a>
         <header className="settings-head">

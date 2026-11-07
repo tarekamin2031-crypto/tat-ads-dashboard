@@ -5,7 +5,7 @@ export const brand = {
   gradient: "linear-gradient(110deg, #0b4a4d 0%, #0a3550 55%, #0a2a45 100%)",
 };
 
-export function BrandBar({ clientName, clientLogo }: { clientName?: string; clientLogo?: string | null }) {
+export function BrandBar({ clientName, clientLogo, admin }: { clientName?: string; clientLogo?: string | null; admin?: boolean }) {
   return (
     <div className="brandbar">
       <div className="brandbar-in">
@@ -20,6 +20,7 @@ export function BrandBar({ clientName, clientLogo }: { clientName?: string; clie
             )}
           </div>
         )}
+        {admin && <a href="/admin/account" className="brand-account">My account</a>}
       </div>
     </div>
   );

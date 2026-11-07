@@ -66,6 +66,11 @@ export async function migrate() {
       external_id TEXT NOT NULL,
       PRIMARY KEY (slug, platform)
     )`,
+    `CREATE TABLE IF NOT EXISTS admin_users (
+      email TEXT PRIMARY KEY,
+      password_hash TEXT NOT NULL,
+      valid_after INTEGER NOT NULL DEFAULT 0
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_insights_account_date ON daily_insights (account_id, date)`,
   ]);
 

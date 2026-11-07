@@ -5,6 +5,7 @@ import { getAnalysis } from "@/lib/analysis";
 import { billingAlerts, getBilling, type Billing } from "@/lib/billing";
 import { listAdAccounts } from "@/lib/meta";
 import { BrandBar } from "@/components/Brand";
+import { requireAdmin } from "@/lib/admin";
 import { CopyLink } from "@/components/CopyLink";
 import { addClient } from "./actions";
 
@@ -37,6 +38,7 @@ export default async function AdminPage({
 }: {
   searchParams: Promise<{ created?: string; pw?: string; error?: string }>;
 }) {
+  await requireAdmin();
   const { created, pw, error } = await searchParams;
   const [accounts, adAccounts, h] = await Promise.all([listAccounts(), listAdAccounts(), headers()]);
   const clients = await Promise.all(
@@ -57,7 +59,7 @@ export default async function AdminPage({
 
   return (
     <>
-      <BrandBar />
+      <BrandBar admin />
       <section className="hero">
         <div className="hero-in">
           <div>

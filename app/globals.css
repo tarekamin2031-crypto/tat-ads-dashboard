@@ -647,3 +647,7 @@ details.manage[open] > summary::before { content: "▾ "; }
 .cl .cc-actions .btn:first-child:hover{background:var(--accent-strong)}
 @media (max-width:1000px) and (min-width:720px){.cl-foot{flex-direction:column;align-items:stretch}.cl .cc-actions{justify-content:space-between}.cl .cc-actions .btn{flex:1;text-align:center}}
 @media (max-width:719px){.cl .cc-actions{flex-wrap:wrap}.cl .cc-actions .btn{flex:1 1 calc(50% - 6px);text-align:center}}
+
+.brandbar-in{position:relative}
+.brand-account{margin-left:auto;color:#fff;opacity:.85;font-size:13px;font-weight:600;text-decoration:none;padding:6px 12px;border:1px solid rgba(255,255,255,.35);border-radius:99px}
+.brand-account:hover{opacity:1;background:rgba(255,255,255,.1)}

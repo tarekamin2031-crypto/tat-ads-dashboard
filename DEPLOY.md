@@ -34,7 +34,8 @@ git push -u origin main
 2. Environment Variables:
    - `META_ACCESS_TOKEN`
    - `DATABASE_URL`, `DATABASE_AUTH_TOKEN`
-   - `DASHBOARD_PASSWORD` (باسورد قوي للـ `/admin`، مش `dev`)
+   - `DASHBOARD_PASSWORD` (الباسورد الأول للـ `/admin`، بتدخل بيه بالإيميل `tarekamin2031@gmail.com` وبعدها تغيّره من "My account")
+   - `ADMIN_EMAIL` (اختياري، الافتراضي `tarekamin2031@gmail.com`)
    - `SESSION_SECRET` (أي نص عشوائي طويل: `openssl rand -hex 32`)
 3. Deploy. لينك العميل: `https://<your-app>.vercel.app/c/<slug>`.
 
