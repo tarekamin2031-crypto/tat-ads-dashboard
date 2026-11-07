@@ -58,7 +58,7 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
       res = await fetch(`https://googleads.googleapis.com/${v}/customers/${id}/googleAds:search`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ query, pageSize: 10000, ...(pageToken ? { pageToken } : {}) }),
+        body: JSON.stringify({ query, ...(pageToken ? { pageToken } : {}) }),
       });
       if (res.status !== 404) {
         workingVersion = v;
