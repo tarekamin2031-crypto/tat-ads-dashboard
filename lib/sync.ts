@@ -4,7 +4,7 @@ import { db } from "./db";
 import { fetchCampaigns, fetchInsights, type InsightRow } from "./meta";
 import { insightsKey, platformReady } from "./platforms";
 import { fetchGoogleInsights, googleLastNote } from "./google";
-import { loadCredentials } from "./secrets";
+import { credentialStatus, loadCredentials } from "./secrets";
 import { fetchTikTokInsights } from "./tiktok";
 
 const BACKFILL_DAYS = 90;
@@ -91,7 +91,13 @@ export async function syncOtherPlatforms(acc: Account, backfill = false): Promis
   for (const r of linked.rows) {
     const platform = String(r.platform);
     const f = FETCHERS[platform];
-    if (!f || !platformReady(platform)) continue;
+    if (!f) continue;
+    if (!platformReady(platform)) {
+      // Say so instead of skipping silently: the usual cause is a missing or different INTEGRATIONS_KEY.
+      const st = credentialStatus();
+      notes.push(`${acc.name} [${f.label}]: SKIPPED, no usable credentials (INTEGRATIONS_KEY ${st.integrationsKey ? "is set" : "is NOT set"}; ${st.readable} of ${st.stored} saved credentials could be decrypted)`);
+      continue;
+    }
     const key = insightsKey(platform, String(r.external_id));
     const existing = await db.execute({ sql: "SELECT COUNT(*) AS n FROM daily_insights WHERE account_id = ?", args: [key] });
     const firstRun = Number(existing.rows[0].n) === 0 || backfill;
