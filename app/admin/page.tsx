@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { listAccounts } from "@/lib/accounts";
 import { getAlerts } from "@/lib/alerts";
+import { billingAlerts, getBilling, type Billing } from "@/lib/billing";
 import { listAdAccounts } from "@/lib/meta";
 import { BrandBar } from "@/components/Brand";
 import { addClient, resetPassword, setLogo } from "./actions";
@@ -13,6 +14,24 @@ const LEVEL_COLOR = { bad: "#c62828", warn: "#ef6c00", good: "#2e7d32" };
 const input = { padding: 8, borderRadius: 6, border: "1px solid #dadde1", fontSize: 14 };
 const button = { padding: "8px 14px", borderRadius: 6, border: 0, background: "#0f766e", color: "#fff", cursor: "pointer" };
 
+const fmt = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+
+function BillingLine({ b }: { b: Billing | null }) {
+  if (!b) return <div style={{ fontSize: 12, color: "#8a8d91" }}>Billing unavailable</div>;
+  const parts =
+    b.available === null
+      ? ["No spending limit"]
+      : [`Available ${fmt(b.available)} ${b.currency}`, `net ${fmt(b.availableNet ?? 0)} after tax`];
+  if (!b.isPrepay) parts.push(`due ${fmt(b.amountDue)}`);
+  return (
+    <div style={{ fontSize: 12, color: b.low || b.statusCode !== 1 ? "#b71c1c" : "#65676b", fontWeight: b.low ? 600 : 400 }}>
+      {b.low ? "⚠ " : ""}
+      {parts.join(" · ")}
+      {b.statusCode !== 1 ? ` · ${b.status}` : ""}
+    </div>
+  );
+}
+
 export default async function AdminPage({
   searchParams,
 }: {
@@ -20,8 +39,14 @@ export default async function AdminPage({
 }) {
   const { created, pw, error } = await searchParams;
   const [accounts, adAccounts, h] = await Promise.all([listAccounts(), listAdAccounts(), headers()]);
-  const alertsByClient = await Promise.all(accounts.map(async (a) => ({ account: a, alerts: await getAlerts(a) })));
-  const withAlerts = alertsByClient.filter((c) => c.alerts.length > 0);
+  const clients = await Promise.all(
+    accounts.map(async (a) => {
+      const [billing, performance] = await Promise.all([getBilling(a), getAlerts(a)]);
+      return { account: a, billing, alerts: [...billingAlerts(billing), ...performance] };
+    }),
+  );
+  const withAlerts = clients.filter((c) => c.alerts.length > 0);
+  const billingBySlug = new Map(clients.map((c) => [c.account.slug, c.billing]));
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
   const taken = new Set(accounts.map((a) => a.ad_account_id));
   const available = adAccounts.filter((a) => !taken.has(a.account_id));
@@ -31,10 +56,10 @@ export default async function AdminPage({
     <BrandBar />
     <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
       <section style={box}>
-        <h2 style={{ fontSize: 16, marginTop: 0 }}>Alerts — yesterday vs the previous 7-day average</h2>
+        <h2 style={{ fontSize: 16, marginTop: 0 }}>Alerts — billing, and yesterday vs the previous 7-day average</h2>
         {accounts.length === 0 && <p style={{ color: "#65676b", margin: 0 }}>No clients yet.</p>}
         {accounts.length > 0 && withAlerts.length === 0 && (
-          <p style={{ color: "#2e7d32", margin: 0 }}>All normal: no client moved 40% or more on spend or cost per result.</p>
+          <p style={{ color: "#2e7d32", margin: 0 }}>All normal: balances are above the limit and no client moved 40% or more on spend or cost per result.</p>
         )}
         {withAlerts.map(({ account, alerts }) => (
           <div key={account.slug} style={{ padding: "10px 0", borderTop: "1px solid #f0f2f5" }}>
@@ -101,6 +126,7 @@ export default async function AdminPage({
                 <br />
                 <a href={`/c/${a.slug}`}>/c/{a.slug}</a>
                 <small style={{ color: "#65676b" }}> · {a.currency} · {a.timezone}</small>
+                <BillingLine b={billingBySlug.get(a.slug) ?? null} />
               </div>
             </div>
             <div style={{ display: "grid", gap: 6 }}>

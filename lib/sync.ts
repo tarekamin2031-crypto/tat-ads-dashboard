@@ -47,5 +47,11 @@ export async function syncAccount(acc: Account): Promise<string> {
     );
   }
 
+  // Lets the dashboard tell "no spend yesterday" apart from "the sync hasn't run".
+  await db.execute({
+    sql: "INSERT OR REPLACE INTO sync_log (account_id, synced_at) VALUES (?, ?)",
+    args: [acc.ad_account_id, new Date().toISOString()],
+  });
+
   return `${acc.name}: ${since} -> ${until}${firstRun ? " (backfill)" : ""}, ${campaigns.length} campaigns, ${insights.length} daily rows`;
 }

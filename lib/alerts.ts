@@ -6,6 +6,7 @@ export type Alert = { scope: string; level: "bad" | "warn" | "good"; text: strin
 
 const THRESHOLD = 0.4; // flag moves of 40% or more versus the baseline
 const BASELINE_DAYS = 7;
+const MAX_SYNC_AGE_MS = 36 * 60 * 60 * 1000; // daily sync + slack for a late run
 const MIN_BASELINE_ACTIVE_DAYS = 3; // new/rarely-running campaigns have no "normal" yet
 
 type Day = { spend: number; results: number };
@@ -20,6 +21,17 @@ export async function getAlerts(account: Account): Promise<Alert[]> {
   const yesterday = dateInTz(tz, 1);
   const baseFrom = dateInTz(tz, 1 + BASELINE_DAYS);
   const baseTo = dateInTz(tz, 2);
+
+  // Alerts compare against yesterday, so they are only meaningful if the sync has run recently.
+  const log = await db.execute({
+    sql: "SELECT synced_at FROM sync_log WHERE account_id = ?",
+    args: [account.ad_account_id],
+  });
+  const syncedAt = log.rows[0] ? Date.parse(String(log.rows[0].synced_at)) : NaN;
+  if (!(Date.now() - syncedAt < MAX_SYNC_AGE_MS)) {
+    const when = Number.isNaN(syncedAt) ? "No sync recorded yet" : `Last synced ${new Date(syncedAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+    return [{ scope: "Data", level: "warn", text: `${when}. Performance alerts are paused until the next sync` }];
+  }
 
   const { rows } = await db.execute({
     sql: `SELECT date, campaign_id, campaign_name,

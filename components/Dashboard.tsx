@@ -1,6 +1,11 @@
 import { Fragment, type CSSProperties } from "react";
 import type { Account } from "@/lib/accounts";
+import { after } from "next/server";
+import { AlertModal } from "@/components/AlertModal";
+import { BillingPanel } from "@/components/BillingPanel";
 import { BrandBar, BrandFooter } from "@/components/Brand";
+import { billingAlerts, getBilling, TAX_RATE } from "@/lib/billing";
+import { notifyVisit } from "@/lib/notify";
 import { dateInTz, PRESET_DAYS, type Range } from "@/lib/dates";
 import { db } from "@/lib/db";
 
@@ -87,7 +92,8 @@ export async function Dashboard({ account, range, basePath }: { account: Account
   const today = dateInTz(account.timezone, 0);
   const id = account.ad_account_id;
 
-  const [totalRes, dailyRes, campaignRes, adsetRes, lastRes] = await Promise.all([
+  const [billing, totalRes, dailyRes, campaignRes, adsetRes, lastRes] = await Promise.all([
+    getBilling(account),
     db.execute({
       sql: `SELECT ${SUMS} FROM daily_insights WHERE account_id = ? AND date BETWEEN ? AND ?`,
       args: [id, since, until],
@@ -119,6 +125,9 @@ export async function Dashboard({ account, range, basePath }: { account: Account
     adsetsByCampaign.set(String(r.campaign_id), list);
   }
 
+  // Runs after the response is sent, so the Telegram call never slows the client's page.
+  after(() => notifyVisit(account, billing));
+
   const total = toTotals(totalRes.rows[0] ?? {});
   const daily = dailyRes.rows.map((r) => ({ date: String(r.date), ...toTotals(r) }));
   const campaigns = campaignRes.rows.map((r) => ({
@@ -134,6 +143,7 @@ export async function Dashboard({ account, range, basePath }: { account: Account
 
   const cards: [string, string][] = [
     [`Spend (${account.currency})`, money(total.spend)],
+    [`Spend incl. tax (+${Math.round(TAX_RATE * 100)}%)`, money(total.spend * (1 + TAX_RATE))],
     ["Results", int(results(total))],
     ["Cost / Result", money(cpr)],
     ["ROAS", roas.toFixed(2)],
@@ -147,6 +157,7 @@ export async function Dashboard({ account, range, basePath }: { account: Account
   return (
     <>
     <BrandBar clientName={account.name} clientLogo={account.logo} />
+    <AlertModal items={billingAlerts(billing).map((a) => a.text)} />
     <main style={{ maxWidth: 1100, margin: "0 auto", padding: 24 }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -158,6 +169,8 @@ export async function Dashboard({ account, range, basePath }: { account: Account
           </small>
         </div>
       </header>
+
+      <BillingPanel billing={billing} />
 
       <nav style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "16px 0 0" }}>
         <form

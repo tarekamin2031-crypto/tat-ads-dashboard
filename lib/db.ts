@@ -52,6 +52,14 @@ export async function migrate() {
       purchase_value REAL NOT NULL DEFAULT 0,
       PRIMARY KEY (date, adset_id)
     )`,
+    `CREATE TABLE IF NOT EXISTS sync_log (
+      account_id TEXT PRIMARY KEY,
+      synced_at TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS visit_notify (
+      slug TEXT PRIMARY KEY,
+      last_notified_at TEXT NOT NULL
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_insights_account_date ON daily_insights (account_id, date)`,
   ]);
 }

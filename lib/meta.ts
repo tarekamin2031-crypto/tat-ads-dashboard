@@ -90,6 +90,24 @@ export async function fetchCampaigns(adAccountId: string): Promise<CampaignInfo[
   return getAll<CampaignInfo>(`${API}/act_${adAccountId}/campaigns?${params}`);
 }
 
+export type AccountBillingRaw = {
+  account_status: number;
+  disable_reason: number;
+  is_prepay_account: boolean;
+  balance: string; // amount currently owed (minor units)
+  amount_spent: string; // lifetime spend (minor units)
+  spend_cap: string; // account spending limit, "0" = none (minor units)
+  funding_source_details?: { display_string?: string };
+};
+
+export async function fetchAccountBilling(adAccountId: string): Promise<AccountBillingRaw> {
+  const params = new URLSearchParams({
+    access_token: token(),
+    fields: "account_status,disable_reason,is_prepay_account,balance,amount_spent,spend_cap,funding_source_details",
+  });
+  return getJson(`${API}/act_${adAccountId}?${params}`);
+}
+
 export async function listAdAccounts(): Promise<AdAccountInfo[]> {
   const params = new URLSearchParams({
     access_token: token(),
