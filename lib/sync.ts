@@ -3,6 +3,7 @@ import { dateInTz } from "./dates";
 import { db } from "./db";
 import { fetchCampaigns, fetchInsights, type InsightRow } from "./meta";
 import { insightsKey, platformReady } from "./platforms";
+import { fetchGoogleInsights } from "./google";
 import { fetchTikTokInsights } from "./tiktok";
 
 const BACKFILL_DAYS = 90;
@@ -75,24 +76,29 @@ async function storeInsights(key: string, insights: InsightRow[]) {
 }
 
 // Pulls every non-Meta platform linked to this client that the server has credentials for.
+const FETCHERS: Record<string, { label: string; fetch: (id: string, since: string, until: string) => Promise<InsightRow[]> }> = {
+  tiktok: { label: "TikTok", fetch: fetchTikTokInsights },
+  google: { label: "Google Ads", fetch: fetchGoogleInsights },
+};
+
 export async function syncOtherPlatforms(acc: Account): Promise<string[]> {
   const linked = await db.execute({ sql: "SELECT platform, external_id FROM account_platforms WHERE slug = ?", args: [acc.slug] });
   const notes: string[] = [];
   for (const r of linked.rows) {
     const platform = String(r.platform);
-    if (platform === "tiktok" && platformReady("tiktok")) {
-      const key = insightsKey(platform, String(r.external_id));
-      const existing = await db.execute({ sql: "SELECT COUNT(*) AS n FROM daily_insights WHERE account_id = ?", args: [key] });
-      const firstRun = Number(existing.rows[0].n) === 0;
-      const since = dateInTz(acc.timezone, firstRun ? BACKFILL_DAYS : REFRESH_DAYS);
-      const until = dateInTz(acc.timezone, 0);
-      try {
-        const rows = await fetchTikTokInsights(String(r.external_id), since, until);
-        await storeInsights(key, rows);
-        notes.push(`${acc.name} [TikTok]: ${since} -> ${until}${firstRun ? " (backfill)" : ""}, ${rows.length} daily rows`);
-      } catch (e) {
-        notes.push(`${acc.name} [TikTok]: FAILED ${(e as Error).message}`);
-      }
+    const f = FETCHERS[platform];
+    if (!f || !platformReady(platform)) continue;
+    const key = insightsKey(platform, String(r.external_id));
+    const existing = await db.execute({ sql: "SELECT COUNT(*) AS n FROM daily_insights WHERE account_id = ?", args: [key] });
+    const firstRun = Number(existing.rows[0].n) === 0;
+    const since = dateInTz(acc.timezone, firstRun ? BACKFILL_DAYS : REFRESH_DAYS);
+    const until = dateInTz(acc.timezone, 0);
+    try {
+      const rows = await f.fetch(String(r.external_id), since, until);
+      await storeInsights(key, rows);
+      notes.push(`${acc.name} [${f.label}]: ${since} -> ${until}${firstRun ? " (backfill)" : ""}, ${rows.length} daily rows`);
+    } catch (e) {
+      notes.push(`${acc.name} [${f.label}]: FAILED ${(e as Error).message}`);
     }
   }
   return notes;
