@@ -71,6 +71,10 @@ export async function migrate() {
       password_hash TEXT NOT NULL,
       valid_after INTEGER NOT NULL DEFAULT 0
     )`,
+    `CREATE TABLE IF NOT EXISTS integration_credentials (
+      name TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_insights_account_date ON daily_insights (account_id, date)`,
   ]);
 

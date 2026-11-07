@@ -651,3 +651,4 @@ details.manage[open] > summary::before { content: "▾ "; }
 .brandbar-in{position:relative}
 .brand-account{margin-left:auto;color:#fff;opacity:.85;font-size:13px;font-weight:600;text-decoration:none;padding:6px 12px;border:1px solid rgba(255,255,255,.35);border-radius:99px}
 .brand-account:hover{opacity:1;background:rgba(255,255,255,.1)}
+.brand-links{margin-left:auto;display:flex;gap:8px}.brand-links .brand-account{margin-left:0}

@@ -20,7 +20,12 @@ export function BrandBar({ clientName, clientLogo, admin }: { clientName?: strin
             )}
           </div>
         )}
-        {admin && <a href="/admin/account" className="brand-account">My account</a>}
+        {admin && (
+          <span className="brand-links">
+            <a href="/admin/integrations" className="brand-account">Integrations</a>
+            <a href="/admin/account" className="brand-account">My account</a>
+          </span>
+        )}
       </div>
     </div>
   );

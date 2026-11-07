@@ -42,3 +42,8 @@ git push -u origin main
 ## 5. بعد النشر
 - افتح `/admin` وتأكد إن العملاء ظاهرين، وجرّب لينك عميل بباسورده.
 - أضف باقي العملاء من `/admin` (بيسحب بياناتهم على طول).
+
+
+## ربط TikTok / Google Ads
+من `/admin/integrations` (زرار "Integrations" فوق) تلصق بيانات المنصة وتدوس "Save & pull data". بتتخزن مشفّرة في قاعدة البيانات، والـ sync اليومي في GitHub بيقراها من هناك.
+الشرط الوحيد: `SESSION_SECRET` لازم يتضاف كـ Secret في GitHub (Settings ← Secrets and variables ← Actions) بنفس قيمته في Vercel، عشان الـ sync يفك التشفير.

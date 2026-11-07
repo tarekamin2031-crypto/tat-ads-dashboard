@@ -1,4 +1,5 @@
 import type { InsightRow } from "./meta";
+import { cred } from "./secrets";
 
 // TikTok Marketing API, reporting at ad group level, one row per ad group per day.
 // Needs TIKTOK_ACCESS_TOKEN (a long-lived token from a TikTok for Business developer app that
@@ -6,13 +7,13 @@ import type { InsightRow } from "./meta";
 const API = "https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/";
 const MAX_DAYS = 30; // TikTok limits daily-breakdown reports to 30 days per request
 
-export const tiktokConfigured = () => Boolean(process.env.TIKTOK_ACCESS_TOKEN);
+export const tiktokConfigured = () => Boolean(cred("TIKTOK_ACCESS_TOKEN"));
 
 const addDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 const num = (v: unknown) => Number(v ?? 0) || 0;
 
 export async function fetchTikTokInsights(advertiserId: string, since: string, until: string): Promise<InsightRow[]> {
-  const token = process.env.TIKTOK_ACCESS_TOKEN;
+  const token = cred("TIKTOK_ACCESS_TOKEN");
   if (!token) throw new Error("Missing env var TIKTOK_ACCESS_TOKEN");
   const rows: InsightRow[] = [];
 

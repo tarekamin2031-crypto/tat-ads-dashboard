@@ -8,6 +8,7 @@ import { sessionCookieName, sessionToken } from "@/lib/auth";
 import { resolveRange } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { insightsKey, platformById, platformReady } from "@/lib/platforms";
+import { loadCredentials } from "@/lib/secrets";
 import { login } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ export default async function ClientPage({
 
   const cookie = (await cookies()).get(sessionCookieName(slug))?.value ?? "";
   if (safeEqual(cookie, sessionToken(slug, account.password_hash))) {
+    await loadCredentials();
     const range = resolveRange(query, account.timezone);
     // Tabs: Meta always, plus each linked platform that has data synced.
     const linked = await db.execute({ sql: "SELECT platform, external_id FROM account_platforms WHERE slug = ?", args: [slug] });

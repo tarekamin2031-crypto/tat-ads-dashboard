@@ -4,6 +4,7 @@ import { db } from "./db";
 import { fetchCampaigns, fetchInsights, type InsightRow } from "./meta";
 import { insightsKey, platformReady } from "./platforms";
 import { fetchGoogleInsights } from "./google";
+import { loadCredentials } from "./secrets";
 import { fetchTikTokInsights } from "./tiktok";
 
 const BACKFILL_DAYS = 90;
@@ -82,6 +83,7 @@ const FETCHERS: Record<string, { label: string; fetch: (id: string, since: strin
 };
 
 export async function syncOtherPlatforms(acc: Account): Promise<string[]> {
+  await loadCredentials();
   const linked = await db.execute({ sql: "SELECT platform, external_id FROM account_platforms WHERE slug = ?", args: [acc.slug] });
   const notes: string[] = [];
   for (const r of linked.rows) {

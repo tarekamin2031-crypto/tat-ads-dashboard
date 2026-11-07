@@ -1,4 +1,5 @@
 import type { InsightRow } from "./meta";
+import { cred } from "./secrets";
 
 // Google Ads API (REST), ad-group level, one row per ad group per day, via a GAQL query.
 // Needs, from the agency's Google Ads manager (MCC) account and a Google Cloud OAuth client:
@@ -8,7 +9,7 @@ import type { InsightRow } from "./meta";
 const VERSION = process.env.GOOGLE_ADS_API_VERSION || "v21";
 
 export const googleConfigured = () =>
-  Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN && process.env.GOOGLE_ADS_CLIENT_ID && process.env.GOOGLE_ADS_CLIENT_SECRET && process.env.GOOGLE_ADS_REFRESH_TOKEN);
+  Boolean(cred("GOOGLE_ADS_DEVELOPER_TOKEN") && cred("GOOGLE_ADS_CLIENT_ID") && cred("GOOGLE_ADS_CLIENT_SECRET") && cred("GOOGLE_ADS_REFRESH_TOKEN"));
 
 const digits = (s: string) => s.replace(/\D/g, "");
 const num = (v: unknown) => Number(v ?? 0) || 0;
@@ -18,9 +19,9 @@ async function accessToken(): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: process.env.GOOGLE_ADS_CLIENT_ID ?? "",
-      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET ?? "",
-      refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN ?? "",
+      client_id: cred("GOOGLE_ADS_CLIENT_ID"),
+      client_secret: cred("GOOGLE_ADS_CLIENT_SECRET"),
+      refresh_token: cred("GOOGLE_ADS_REFRESH_TOKEN"),
       grant_type: "refresh_token",
     }),
   });
@@ -35,10 +36,10 @@ export async function fetchGoogleInsights(customerId: string, since: string, unt
   const token = await accessToken();
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
-    "developer-token": process.env.GOOGLE_ADS_DEVELOPER_TOKEN ?? "",
+    "developer-token": cred("GOOGLE_ADS_DEVELOPER_TOKEN"),
     "Content-Type": "application/json",
   };
-  const login = digits(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ?? "");
+  const login = digits(cred("GOOGLE_ADS_LOGIN_CUSTOMER_ID"));
   if (login) headers["login-customer-id"] = login;
 
   const query = `SELECT segments.date, campaign.id, campaign.name, ad_group.id, ad_group.name,
