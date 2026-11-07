@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/admin";
 import { CopyLink } from "@/components/CopyLink";
 import { getAccount } from "@/lib/accounts";
 import { db } from "@/lib/db";
-import { PLATFORMS, platformReady } from "@/lib/platforms";
+import { insightsKey, PLATFORMS, platformReady } from "@/lib/platforms";
 import { loadCredentials } from "@/lib/secrets";
 import { resetPassword, setLogo } from "../../actions";
 import { saveAlerts, saveBudget, saveDetails, saveNotifications, savePlatform } from "./actions";
@@ -41,6 +41,13 @@ export default async function ClientSettings({
   const link = `${origin}/c/${a.slug}`;
   const linked = await db.execute({ sql: "SELECT platform, external_id FROM account_platforms WHERE slug = ?", args: [slug] });
   const ids = new Map(linked.rows.map((r) => [String(r.platform), String(r.external_id)]));
+  // Rows already pulled per linked platform, so "Live" with no data is visible here and not just on the client's page.
+  const pulledInfo = new Map<string, { n: number; last: string | null }>();
+  for (const [platform, external] of ids) {
+    if (platform === "meta") continue;
+    const r = await db.execute({ sql: "SELECT COUNT(*) AS n, MAX(date) AS d FROM daily_insights WHERE account_id = ?", args: [insightsKey(platform, external)] });
+    pulledInfo.set(platform, { n: Number(r.rows[0]?.n ?? 0), last: r.rows[0]?.d ? String(r.rows[0].d) : null });
+  }
   const log = await db.execute({ sql: "SELECT synced_at FROM sync_log WHERE account_id = ?", args: [a.ad_account_id] });
   const syncedAt = log.rows[0] ? String(log.rows[0].synced_at) : null;
 
@@ -193,6 +200,9 @@ export default async function ClientSettings({
                     <input className="field" name="external_id" defaultValue={ids.get(p.id) ?? ""} placeholder={`${p.idLabel} (${p.placeholder})`} aria-label={`${p.label} ${p.idLabel}`} autoComplete="off" />
                     <button className="btn ghost small" type="submit">Save</button>
                   </form>
+                  {pulledInfo.has(p.id) && p.hasAdapter && platformReady(p.id) && (
+                    <small className="plat-info">{pulledInfo.get(p.id)!.n > 0 ? `${pulledInfo.get(p.id)!.n} rows · up to ${pulledInfo.get(p.id)!.last}` : "No data pulled yet"}</small>
+                  )}
                   <span className={`pill ${!ids.has(p.id) ? "muted" : p.hasAdapter && platformReady(p.id) ? "good" : "warn"}`}>
                     {!ids.has(p.id) ? "Not linked" : p.hasAdapter && platformReady(p.id) ? "Live" : p.hasAdapter ? "Needs token" : "Pending"}
                   </span>

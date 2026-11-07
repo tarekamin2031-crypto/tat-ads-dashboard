@@ -6,10 +6,10 @@ import { removeIntegration, saveIntegration } from "./actions";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // saving pulls data for clients already linked
 
-export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<{ saved?: string; pulled?: string; removed?: string; error?: string }> }) {
+export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<{ saved?: string; pulled?: string; note?: string; removed?: string; error?: string }> }) {
   await requireAdmin();
   await loadCredentials(true);
-  const { saved, pulled, removed, error } = await searchParams;
+  const { saved, pulled, note, removed, error } = await searchParams;
   const sessionSecretOk = Boolean(process.env.SESSION_SECRET);
 
   return (
@@ -25,7 +25,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         </header>
 
         {error && <div className="notice err" role="alert">{error}</div>}
-        {saved && <div className="notice ok" role="status">✓ Saved. {Number(pulled) > 0 ? `Pulled data for ${pulled} linked ${Number(pulled) === 1 ? "client" : "clients"}. ` : ""}The daily sync uses these automatically.</div>}
+        {saved && <div className="notice ok" role="status">✓ Saved. {Number(pulled) > 0 ? `Pulled data for ${pulled} linked ${Number(pulled) === 1 ? "client" : "clients"}. ` : ""}The daily sync uses these automatically.{note && <><br /><small>{note}</small></>}</div>}
         {removed && <div className="notice ok" role="status">✓ Removed the saved credentials.</div>}
         {!sessionSecretOk && <div className="notice err">SESSION_SECRET is not set, so credentials cannot be stored.</div>}
 

@@ -25,7 +25,7 @@ export async function saveIntegration(id: string, formData: FormData) {
   for (const acc of (await listAccounts()).filter((a) => slugs.has(a.slug))) notes.push(...(await syncOtherPlatforms(acc)));
   const failed = notes.find((n) => n.includes("FAILED"));
   if (failed) back(`error=${encodeURIComponent(`Saved, but the first data pull failed: ${failed}`)}`);
-  back(`saved=${id}&pulled=${notes.length}`);
+  back(`saved=${id}&pulled=${notes.length}&note=${encodeURIComponent(notes.join(" | ").slice(0, 600))}`);
 }
 
 export async function removeIntegration(id: string) {
