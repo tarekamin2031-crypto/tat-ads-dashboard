@@ -95,7 +95,7 @@ export async function syncOtherPlatforms(acc: Account, backfill = false): Promis
     if (!platformReady(platform)) {
       // Say so instead of skipping silently: the usual cause is a missing or different INTEGRATIONS_KEY.
       const st = credentialStatus();
-      notes.push(`${acc.name} [${f.label}]: SKIPPED, no usable credentials (INTEGRATIONS_KEY ${st.integrationsKey ? "is set" : "is NOT set"}; ${st.readable} of ${st.stored} saved credentials could be decrypted)`);
+      notes.push(`${acc.name} [${f.label}]: SKIPPED, no usable credentials (INTEGRATIONS_KEY ${st.integrationsKey ? "is set" : "is NOT set"}, key fingerprint ${st.fingerprint}; ${st.readable} of ${st.stored} saved credentials could be decrypted)`);
       continue;
     }
     const key = insightsKey(platform, String(r.external_id));

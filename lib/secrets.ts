@@ -85,9 +85,11 @@ function decrypt(stored: string): { value: string; legacy: boolean } | null {
 
 let overlay: Record<string, string> = {};
 let loadedAt = 0;
-let stats = { stored: 0, readable: 0 };
+let stats = { stored: 0, readable: 0, legacy: 0 };
 // For the sync log: how many saved credentials exist and how many this process could decrypt.
-export const credentialStatus = () => ({ keyPresent: credentialKeyConfigured(), integrationsKey: Boolean(process.env.INTEGRATIONS_KEY), ...stats });
+// A short, harmless fingerprint of the key, so Vercel and the GitHub sync can be compared without showing the key.
+export const keyFingerprint = () => (primarySecret() ? createHash("sha256").update(key()).digest("hex").slice(0, 8) : "none");
+export const credentialStatus = () => ({ keyPresent: credentialKeyConfigured(), integrationsKey: Boolean(process.env.INTEGRATIONS_KEY), fingerprint: keyFingerprint(), ...stats });
 
 // Call before reading credentials (pages, actions, the sync script). Cached for 30 seconds.
 export async function loadCredentials(force = false) {
@@ -95,11 +97,12 @@ export async function loadCredentials(force = false) {
   await ensureSchema();
   const res = await db.execute("SELECT name, value FROM integration_credentials");
   const next: Record<string, string> = {};
-  stats = { stored: res.rows.length, readable: 0 };
+  stats = { stored: res.rows.length, readable: 0, legacy: 0 };
   for (const r of res.rows) {
     const d = decrypt(String(r.value));
     if (!d) continue;
     stats.readable++;
+    if (d.legacy) stats.legacy++;
     next[String(r.name)] = d.value;
     if (d.legacy) {
       // Move to the new key so the GitHub sync (which only has INTEGRATIONS_KEY) can read it too.

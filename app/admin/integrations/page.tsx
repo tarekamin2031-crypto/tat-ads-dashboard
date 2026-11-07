@@ -1,6 +1,6 @@
 import { BrandBar } from "@/components/Brand";
 import { requireAdmin } from "@/lib/admin";
-import { cred, credSource, credentialKeyConfigured, INTEGRATIONS, loadCredentials, maskValue } from "@/lib/secrets";
+import { cred, credSource, credentialKeyConfigured, credentialStatus, INTEGRATIONS, loadCredentials, maskValue } from "@/lib/secrets";
 import { removeIntegration, saveIntegration } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +11,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   await loadCredentials(true);
   const { saved, pulled, note, removed, error } = await searchParams;
   const sessionSecretOk = credentialKeyConfigured();
+  const st = credentialStatus();
 
   return (
     <>
@@ -32,6 +33,10 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         <p className="set-help" style={{ margin: "0 0 14px" }}>
           Values are stored encrypted in the database. The daily GitHub sync reads them from there, so nothing needs to be added to GitHub or Vercel except
           <b> INTEGRATIONS_KEY</b> (a random string, same value in both) to decrypt them. Saved values are never shown again, only the last 4 characters.
+        </p>
+
+        <p className="set-help" style={{ margin: "0 0 14px" }}>
+          Key check: this server uses key <b className="mono">{st.fingerprint}</b>{st.integrationsKey ? "" : " (SESSION_SECRET, because INTEGRATIONS_KEY is not set)"}. {st.readable} of {st.stored} saved values are readable here{st.legacy > 0 ? `, ${st.legacy} still on the old key` : ""}. The GitHub sync prints its own key fingerprint in the log: it must show the same {st.fingerprint}.
         </p>
 
         <div className="set-stack">
