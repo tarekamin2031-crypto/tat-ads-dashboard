@@ -9,6 +9,7 @@ import { PrintButton } from "@/components/PrintButton";
 import { billingAlerts, getBilling, getGoogleBilling, TAX_RATE } from "@/lib/billing";
 import { dateInTz, PRESET_DAYS, type Range } from "@/lib/dates";
 import { db } from "@/lib/db";
+import { KINDS as KIND_INFO, RES_SUM } from "@/lib/results";
 import { notifyVisit } from "@/lib/notify";
 
 type Totals = {
@@ -19,6 +20,7 @@ type Totals = {
   purchases: number;
   messages: number;
   profile_visits: number;
+  res: number; // result count by campaign type (see lib/results.ts)
   purchase_value: number;
   calls: number;
   local_actions: number;
@@ -28,19 +30,16 @@ const num = (v: unknown) => Number(v ?? 0);
 const money = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 2 });
 const money0 = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 0 });
 const int = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 0 });
-const results = (t: Totals) => t.leads + t.purchases + t.messages + t.profile_visits;
+const results = (t: Totals) => t.res;
 const cprOf = (t: Totals) => (results(t) ? t.spend / results(t) : null);
 
-// Name the headline after what the account actually gets (messages, leads, purchases).
-const KINDS = [
-  { k: "leads", one: "lead", label: "Leads" },
-  { k: "messages", one: "message", label: "Messages" },
-  { k: "purchases", one: "purchase", label: "Purchases" },
-  { k: "profile_visits", one: "profile visit", label: "Profile visits" },
-] as const;
-function resultNames(t: Totals) {
-  const present = KINDS.filter((x) => t[x.k] > 0);
-  return present.length === 1 ? { label: present[0].label, one: present[0].one, present } : { label: "Results", one: "result", present };
+// Name the headline after what the campaigns are optimised for (messages, leads, profile visits...).
+type KindRow = { kind: string; spend: number; res: number };
+function resultNames(rows: KindRow[]) {
+  const withRes = rows.filter((x) => x.res > 0);
+  const present = (withRes.length ? withRes : rows.filter((x) => x.spend > 0)).map((x) => ({ k: x.kind, ...(KIND_INFO[x.kind] ?? KIND_INFO[""]), spend: x.spend, res: x.res }));
+  const label = present.length === 1 ? present[0] : { label: "Results", one: "result" };
+  return { label: label.label, one: label.one, present };
 }
 
 function toTotals(r: Record<string, unknown>, k = 1): Totals {
@@ -52,6 +51,7 @@ function toTotals(r: Record<string, unknown>, k = 1): Totals {
     purchases: num(r.purchases),
     messages: num(r.messages),
     profile_visits: num(r.profile_visits),
+    res: num(r.res),
     purchase_value: num(r.purchase_value),
     calls: num(r.calls),
     local_actions: num(r.local_actions),
@@ -59,7 +59,7 @@ function toTotals(r: Record<string, unknown>, k = 1): Totals {
 }
 
 const SUMS = `SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(clicks) AS clicks,
-  SUM(leads) AS leads, SUM(purchases) AS purchases, SUM(messages) AS messages, SUM(profile_visits) AS profile_visits,
+  SUM(leads) AS leads, SUM(purchases) AS purchases, SUM(messages) AS messages, SUM(profile_visits) AS profile_visits, ${RES_SUM} AS res,
   SUM(purchase_value) AS purchase_value, SUM(calls) AS calls, SUM(local_actions) AS local_actions`;
 
 const addDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
@@ -154,7 +154,7 @@ export async function Dashboard({
   // Three data queries (was eight): one daily series covering the previous + current period, one
   // ad-set breakdown (campaign totals are summed from it), and the last-synced date. Fewer round
   // trips matters most on a remote database.
-  const [billing, dailyRes, adsetRes, lastRes, monthRes] = await Promise.all([
+  const [billing, dailyRes, adsetRes, lastRes, monthRes, kindRes] = await Promise.all([
     current.id === "google" ? getGoogleBilling(account, current.key.replace(/^google:/, "")) : getBilling(account),
     db.execute({
       sql: `SELECT date, ${SUMS} FROM daily_insights WHERE account_id = ? AND date BETWEEN ? AND ? GROUP BY date`,
@@ -170,6 +170,10 @@ export async function Dashboard({
     isMeta && account.monthly_budget
       ? db.execute({ sql: "SELECT SUM(spend) AS spend FROM daily_insights WHERE account_id = ? AND date BETWEEN ? AND ?", args: [id, `${today.slice(0, 7)}-01`, today] })
       : Promise.resolve(null),
+    db.execute({
+      sql: `SELECT goal, SUM(spend) AS spend, ${RES_SUM} AS res FROM daily_insights WHERE account_id = ? AND date BETWEEN ? AND ? GROUP BY goal`,
+      args: [id, since, until],
+    }),
   ]);
 
   // Runs after the response is sent, so the Telegram call never slows the client's page.
@@ -180,7 +184,7 @@ export async function Dashboard({
     for (const r of rows) {
       const x = tt(r);
       t.spend += x.spend; t.impressions += x.impressions; t.clicks += x.clicks; t.leads += x.leads;
-      t.purchases += x.purchases; t.messages += x.messages; t.profile_visits += x.profile_visits; t.purchase_value += x.purchase_value;
+      t.purchases += x.purchases; t.messages += x.messages; t.profile_visits += x.profile_visits; t.res += x.res; t.purchase_value += x.purchase_value;
       t.calls += x.calls; t.local_actions += x.local_actions;
     }
     return t;
@@ -219,12 +223,12 @@ export async function Dashboard({
     const cid = String(r.campaign_id);
     const c = campMap.get(cid) ?? { id: cid, name: String(r.campaign_name), ...tt({}) };
     c.spend += t.spend; c.impressions += t.impressions; c.clicks += t.clicks; c.leads += t.leads;
-    c.purchases += t.purchases; c.messages += t.messages; c.profile_visits += t.profile_visits; c.purchase_value += t.purchase_value;
+    c.purchases += t.purchases; c.messages += t.messages; c.profile_visits += t.profile_visits; c.res += t.res; c.purchase_value += t.purchase_value;
     campMap.set(cid, c);
   }
   const campaigns = [...campMap.values()].filter(active).sort((x, y) => y.spend - x.spend);
 
-  const rn = resultNames(results(total) > 0 ? total : prev);
+  const rn = resultNames((kindRes.rows as Record<string, unknown>[]).map((r) => ({ kind: String(r.goal ?? ''), spend: num(r.spend) * k, res: num(r.res) })));
   const rowsForTable: Row[] = campaigns.map((c) => ({
     id: c.id,
     name: c.name,
@@ -426,7 +430,7 @@ export async function Dashboard({
           <div className="mini"><span>CPM</span><b>{total.impressions ? money((total.spend / total.impressions) * 1000) : "-"}</b></div>
           <div className="mini"><span>CPC</span><b>{total.clicks ? money(total.spend / total.clicks) : "-"}</b></div>
           {rn.present.length > 1 && rn.present.map((x) => (
-            <div key={x.k} className="mini"><span>{x.label}</span><b>{int(total[x.k])}</b></div>
+            <div key={x.k} className="mini"><span>{x.label} · cost per {x.one}</span><b>{int(x.res)} · {x.res ? money(x.spend / x.res) : "-"} {x.res ? cur : ""}</b></div>
           ))}
         </section>
 

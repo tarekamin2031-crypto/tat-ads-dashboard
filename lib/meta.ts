@@ -1,3 +1,5 @@
+import { goalKind } from "./results";
+
 const API = "https://graph.facebook.com/v21.0";
 
 export type InsightRow = {
@@ -83,6 +85,13 @@ export async function fetchInsights(adAccountId: string, since: string, until: s
     profile_visits: Number(r.instagram_profile_visits ?? 0),
     purchase_value: sumAction(r.action_values, ["purchase", "omni_purchase"]),
   }));
+}
+
+// adset id -> result kind, from each ad set's optimization goal.
+export async function fetchAdsetGoals(adAccountId: string): Promise<Map<string, string>> {
+  const params = new URLSearchParams({ access_token: token(), fields: "id,optimization_goal", limit: "500" });
+  const rows = await getAll<{ id: string; optimization_goal?: string }>(`${API}/act_${adAccountId}/adsets?${params}`);
+  return new Map(rows.map((r) => [r.id, goalKind(r.optimization_goal)]));
 }
 
 export async function fetchCampaigns(adAccountId: string): Promise<CampaignInfo[]> {

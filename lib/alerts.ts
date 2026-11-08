@@ -1,4 +1,5 @@
 import type { Account } from "./accounts";
+import { RES_SUM } from "./results";
 import { dateInTz } from "./dates";
 import { db } from "./db";
 
@@ -35,7 +36,7 @@ export async function getAlerts(account: Account, key = account.ad_account_id, l
 
   const { rows } = await db.execute({
     sql: `SELECT date, campaign_id, campaign_name,
-                 SUM(spend) AS spend, SUM(leads + purchases + messages + profile_visits) AS results
+                 SUM(spend) AS spend, ${RES_SUM} AS results
           FROM daily_insights
           WHERE account_id = ? AND date BETWEEN ? AND ?
           GROUP BY date, campaign_id, campaign_name`,

@@ -94,6 +94,8 @@ export async function migrate() {
   for (const name of ["calls", "local_actions", "profile_visits"]) {
     if (!haveIns.has(name)) await db.execute(`ALTER TABLE daily_insights ADD COLUMN ${name} REAL NOT NULL DEFAULT 0`);
   }
+  // Result kind of the ad set (see lib/results.ts); '' = unknown.
+  if (!haveIns.has("goal")) await db.execute("ALTER TABLE daily_insights ADD COLUMN goal TEXT NOT NULL DEFAULT ''");
 }
 
 let ready: Promise<void> | undefined;

@@ -1,7 +1,7 @@
 import { isMetaAccount, type Account } from "./accounts";
 import { dateInTz } from "./dates";
 import { db } from "./db";
-import { fetchCampaigns, fetchInsights, type InsightRow } from "./meta";
+import { fetchAdsetGoals, fetchCampaigns, fetchInsights, type InsightRow } from "./meta";
 import { insightsKey, platformReady } from "./platforms";
 import { fetchGoogleInsights, googleLastNote } from "./google";
 import { credentialStatus, loadCredentials } from "./secrets";
@@ -12,7 +12,7 @@ const REFRESH_DAYS = 7; // Meta revises recent numbers, so re-pull the last week
 
 const COLS = [
   "date", "account_id", "campaign_id", "campaign_name", "adset_id", "adset_name", "spend", "impressions", "reach",
-  "clicks", "leads", "purchases", "messages", "purchase_value", "calls", "local_actions", "profile_visits",
+  "clicks", "leads", "purchases", "messages", "purchase_value", "calls", "local_actions", "profile_visits", "goal",
 ] as const;
 
 export async function syncAccount(acc: Account): Promise<string> {
@@ -25,10 +25,18 @@ export async function syncAccount(acc: Account): Promise<string> {
   const since = dateInTz(acc.timezone, firstRun ? BACKFILL_DAYS : REFRESH_DAYS);
   const until = dateInTz(acc.timezone, 0);
 
-  const [campaigns, insights] = await Promise.all([
+  const [campaigns, insights, goals] = await Promise.all([
     fetchCampaigns(acc.ad_account_id),
     fetchInsights(acc.ad_account_id, since, until),
+    fetchAdsetGoals(acc.ad_account_id).catch(() => new Map<string, string>()),
   ]);
+  for (const r of insights) (r as { goal?: string }).goal = goals.get(r.adset_id) ?? "";
+  // Older stored days get the same goal, so the whole history is read by campaign type.
+  const goalUpdates = [...goals].filter(([, g]) => g).map(([adset, g]) => ({
+    sql: "UPDATE daily_insights SET goal = ? WHERE account_id = ? AND adset_id = ? AND goal <> ?",
+    args: [g, acc.ad_account_id, adset, g],
+  }));
+  for (let i = 0; i < goalUpdates.length; i += 200) await db.batch(goalUpdates.slice(i, i + 200));
 
   const BATCH = 200;
   for (let i = 0; i < campaigns.length; i += BATCH) {
@@ -46,7 +54,7 @@ export async function syncAccount(acc: Account): Promise<string> {
         const row: Record<string, string | number | undefined> = { ...r, account_id: acc.ad_account_id };
         return {
           sql: `INSERT OR REPLACE INTO daily_insights (${COLS.join(",")}) VALUES (${COLS.map(() => "?").join(",")})`,
-          args: COLS.map((c) => row[c] ?? 0),
+          args: COLS.map((c) => row[c] ?? (c === "goal" ? "" : 0)),
         };
       }),
     );
@@ -69,7 +77,7 @@ async function storeInsights(key: string, insights: InsightRow[]) {
         const row: Record<string, string | number | undefined> = { ...r, account_id: key };
         return {
           sql: `INSERT OR REPLACE INTO daily_insights (${COLS.join(",")}) VALUES (${COLS.map(() => "?").join(",")})`,
-          args: COLS.map((c) => row[c] ?? 0),
+          args: COLS.map((c) => row[c] ?? (c === "goal" ? "" : 0)),
         };
       }),
     );

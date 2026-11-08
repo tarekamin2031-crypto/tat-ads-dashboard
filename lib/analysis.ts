@@ -1,4 +1,5 @@
 import type { Account } from "./accounts";
+import { RES_SUM } from "./results";
 import { dateInTz } from "./dates";
 import { db } from "./db";
 
@@ -77,7 +78,7 @@ export async function getAnalysis(account: Account): Promise<Analysis> {
   // One query for everything: ad-set level per day over the 60-day window.
   const { rows } = await db.execute({
     sql: `SELECT date, campaign_id, campaign_name, adset_id, adset_name,
-                 SUM(spend) AS spend, SUM(leads + purchases + messages + profile_visits) AS results,
+                 SUM(spend) AS spend, ${RES_SUM} AS results,
                  SUM(impressions) AS impressions, SUM(clicks) AS clicks
           FROM daily_insights WHERE account_id = ? AND date BETWEEN ? AND ?
           GROUP BY date, campaign_id, campaign_name, adset_id, adset_name`,
