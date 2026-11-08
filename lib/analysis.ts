@@ -77,7 +77,7 @@ export async function getAnalysis(account: Account): Promise<Analysis> {
   // One query for everything: ad-set level per day over the 60-day window.
   const { rows } = await db.execute({
     sql: `SELECT date, campaign_id, campaign_name, adset_id, adset_name,
-                 SUM(spend) AS spend, SUM(leads + purchases + messages) AS results,
+                 SUM(spend) AS spend, SUM(leads + purchases + messages + profile_visits) AS results,
                  SUM(impressions) AS impressions, SUM(clicks) AS clicks
           FROM daily_insights WHERE account_id = ? AND date BETWEEN ? AND ?
           GROUP BY date, campaign_id, campaign_name, adset_id, adset_name`,
@@ -170,7 +170,7 @@ export async function getAnalysis(account: Account): Promise<Analysis> {
       });
     }
 
-    if (verdict === "Keep" && c.a.results === 0 && c.a.spend > 0) why = "No leads/messages/purchases recorded. May be a traffic or awareness campaign.";
+    if (verdict === "Keep" && c.a.results === 0 && c.a.spend > 0) why = "No leads/messages/purchases/profile visits recorded. May be a traffic or awareness campaign.";
     if (c.a.impressions >= 5000 && ctr < 0.8 && c.a.results > 0) {
       recs.push({
         level: "warn",

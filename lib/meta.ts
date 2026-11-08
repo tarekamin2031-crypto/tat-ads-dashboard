@@ -13,6 +13,7 @@ export type InsightRow = {
   leads: number;
   purchases: number;
   messages: number;
+  profile_visits?: number; // Instagram profile visits (Profile visit campaigns)
   purchase_value: number;
   calls?: number; // Google Smart campaigns: call clicks
   local_actions?: number; // Google Smart campaigns: directions, visits and similar
@@ -62,7 +63,7 @@ export async function fetchInsights(adAccountId: string, since: string, until: s
     level: "adset",
     time_increment: "1",
     time_range: JSON.stringify({ since, until }),
-    fields: "campaign_id,campaign_name,adset_id,adset_name,spend,impressions,reach,clicks,actions,action_values,date_start",
+    fields: "campaign_id,campaign_name,adset_id,adset_name,spend,impressions,reach,clicks,actions,action_values,instagram_profile_visits,date_start",
     limit: "500",
   });
   const rows = await getAll<any>(`${API}/act_${adAccountId}/insights?${params}`);
@@ -79,6 +80,7 @@ export async function fetchInsights(adAccountId: string, since: string, until: s
     leads: sumAction(r.actions, ["lead", "onsite_conversion.lead_grouped"]),
     purchases: sumAction(r.actions, ["purchase", "omni_purchase"]),
     messages: sumAction(r.actions, ["onsite_conversion.messaging_conversation_started_7d"]),
+    profile_visits: Number(r.instagram_profile_visits ?? 0),
     purchase_value: sumAction(r.action_values, ["purchase", "omni_purchase"]),
   }));
 }

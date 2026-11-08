@@ -12,7 +12,7 @@ const REFRESH_DAYS = 7; // Meta revises recent numbers, so re-pull the last week
 
 const COLS = [
   "date", "account_id", "campaign_id", "campaign_name", "adset_id", "adset_name", "spend", "impressions", "reach",
-  "clicks", "leads", "purchases", "messages", "purchase_value", "calls", "local_actions",
+  "clicks", "leads", "purchases", "messages", "purchase_value", "calls", "local_actions", "profile_visits",
 ] as const;
 
 export async function syncAccount(acc: Account): Promise<string> {

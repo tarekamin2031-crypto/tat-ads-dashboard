@@ -43,16 +43,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   }
 
   const res = await db.execute({
-    sql: `SELECT date, campaign_name, adset_name, spend, impressions, clicks, reach, leads, messages, purchases, purchase_value
+    sql: `SELECT date, campaign_name, adset_name, spend, impressions, clicks, reach, leads, messages, profile_visits, purchases, purchase_value
           FROM daily_insights WHERE account_id = ? AND date BETWEEN ? AND ? ORDER BY date, campaign_name, adset_name`,
     args: [key, range.since, range.until],
   });
 
-  const head = ["Date", "Campaign", "Ad set", `Spend (${account.currency})`, "Impressions", "Clicks", "Reach", "Leads", "Messages", "Purchases", "Purchase value"];
+  const head = ["Date", "Campaign", "Ad set", `Spend (${account.currency})`, "Impressions", "Clicks", "Reach", "Leads", "Messages", "Profile visits", "Purchases", "Purchase value"];
   const lines = [head.join(",")];
   for (const r of res.rows) {
     lines.push(
-      [r.date, r.campaign_name, r.adset_name, r.spend, r.impressions, r.clicks, r.reach, r.leads, r.messages, r.purchases, r.purchase_value]
+      [r.date, r.campaign_name, r.adset_name, r.spend, r.impressions, r.clicks, r.reach, r.leads, r.messages, r.profile_visits, r.purchases, r.purchase_value]
         .map((v) => cell(v as string | number))
         .join(","),
     );

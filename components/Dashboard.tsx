@@ -18,6 +18,7 @@ type Totals = {
   leads: number;
   purchases: number;
   messages: number;
+  profile_visits: number;
   purchase_value: number;
   calls: number;
   local_actions: number;
@@ -27,7 +28,7 @@ const num = (v: unknown) => Number(v ?? 0);
 const money = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 2 });
 const money0 = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 0 });
 const int = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 0 });
-const results = (t: Totals) => t.leads + t.purchases + t.messages;
+const results = (t: Totals) => t.leads + t.purchases + t.messages + t.profile_visits;
 const cprOf = (t: Totals) => (results(t) ? t.spend / results(t) : null);
 
 // Name the headline after what the account actually gets (messages, leads, purchases).
@@ -35,6 +36,7 @@ const KINDS = [
   { k: "leads", one: "lead", label: "Leads" },
   { k: "messages", one: "message", label: "Messages" },
   { k: "purchases", one: "purchase", label: "Purchases" },
+  { k: "profile_visits", one: "profile visit", label: "Profile visits" },
 ] as const;
 function resultNames(t: Totals) {
   const present = KINDS.filter((x) => t[x.k] > 0);
@@ -49,6 +51,7 @@ function toTotals(r: Record<string, unknown>, k = 1): Totals {
     leads: num(r.leads),
     purchases: num(r.purchases),
     messages: num(r.messages),
+    profile_visits: num(r.profile_visits),
     purchase_value: num(r.purchase_value),
     calls: num(r.calls),
     local_actions: num(r.local_actions),
@@ -56,7 +59,7 @@ function toTotals(r: Record<string, unknown>, k = 1): Totals {
 }
 
 const SUMS = `SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(clicks) AS clicks,
-  SUM(leads) AS leads, SUM(purchases) AS purchases, SUM(messages) AS messages,
+  SUM(leads) AS leads, SUM(purchases) AS purchases, SUM(messages) AS messages, SUM(profile_visits) AS profile_visits,
   SUM(purchase_value) AS purchase_value, SUM(calls) AS calls, SUM(local_actions) AS local_actions`;
 
 const addDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
@@ -177,7 +180,7 @@ export async function Dashboard({
     for (const r of rows) {
       const x = tt(r);
       t.spend += x.spend; t.impressions += x.impressions; t.clicks += x.clicks; t.leads += x.leads;
-      t.purchases += x.purchases; t.messages += x.messages; t.purchase_value += x.purchase_value;
+      t.purchases += x.purchases; t.messages += x.messages; t.profile_visits += x.profile_visits; t.purchase_value += x.purchase_value;
       t.calls += x.calls; t.local_actions += x.local_actions;
     }
     return t;
@@ -216,7 +219,7 @@ export async function Dashboard({
     const cid = String(r.campaign_id);
     const c = campMap.get(cid) ?? { id: cid, name: String(r.campaign_name), ...tt({}) };
     c.spend += t.spend; c.impressions += t.impressions; c.clicks += t.clicks; c.leads += t.leads;
-    c.purchases += t.purchases; c.messages += t.messages; c.purchase_value += t.purchase_value;
+    c.purchases += t.purchases; c.messages += t.messages; c.profile_visits += t.profile_visits; c.purchase_value += t.purchase_value;
     campMap.set(cid, c);
   }
   const campaigns = [...campMap.values()].filter(active).sort((x, y) => y.spend - x.spend);
