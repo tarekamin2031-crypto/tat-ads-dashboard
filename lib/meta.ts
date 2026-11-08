@@ -87,6 +87,24 @@ export async function fetchInsights(adAccountId: string, since: string, until: s
   }));
 }
 
+// Unique reach and frequency for a whole period. They cannot be summed from daily rows (the same
+// person is counted once per day), so they are asked from Meta directly and cached briefly.
+const reachCache = new Map<string, { at: number; v: { reach: number; frequency: number } | null }>();
+export async function fetchPeriodReach(adAccountId: string, since: string, until: string) {
+  const key = `${adAccountId}|${since}|${until}`;
+  const hit = reachCache.get(key);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.v;
+  let v: { reach: number; frequency: number } | null = null;
+  try {
+    const params = new URLSearchParams({ access_token: token(), fields: "reach,frequency", time_range: JSON.stringify({ since, until }) });
+    const res = await fetch(`${API}/act_${adAccountId}/insights?${params}`, { signal: AbortSignal.timeout(6000) });
+    const row = (await res.json()).data?.[0];
+    if (row) v = { reach: Number(row.reach ?? 0), frequency: Number(row.frequency ?? 0) };
+  } catch {}
+  reachCache.set(key, { at: Date.now(), v });
+  return v;
+}
+
 // adset id -> result kind, from each ad set's optimization goal.
 export async function fetchAdsetGoals(adAccountId: string): Promise<Map<string, string>> {
   const params = new URLSearchParams({ access_token: token(), fields: "id,optimization_goal", limit: "500" });

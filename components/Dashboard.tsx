@@ -9,6 +9,7 @@ import { PrintButton } from "@/components/PrintButton";
 import { billingAlerts, getBilling, getGoogleBilling, TAX_RATE } from "@/lib/billing";
 import { dateInTz, PRESET_DAYS, type Range } from "@/lib/dates";
 import { db } from "@/lib/db";
+import { fetchPeriodReach } from "@/lib/meta";
 import { KINDS as KIND_INFO, RES_SUM } from "@/lib/results";
 import { notifyVisit } from "@/lib/notify";
 
@@ -154,7 +155,7 @@ export async function Dashboard({
   // Three data queries (was eight): one daily series covering the previous + current period, one
   // ad-set breakdown (campaign totals are summed from it), and the last-synced date. Fewer round
   // trips matters most on a remote database.
-  const [billing, dailyRes, adsetRes, lastRes, monthRes, kindRes] = await Promise.all([
+  const [billing, dailyRes, adsetRes, lastRes, monthRes, kindRes, periodReach] = await Promise.all([
     current.id === "google" ? getGoogleBilling(account, current.key.replace(/^google:/, "")) : getBilling(account),
     db.execute({
       sql: `SELECT date, ${SUMS} FROM daily_insights WHERE account_id = ? AND date BETWEEN ? AND ? GROUP BY date`,
@@ -174,6 +175,7 @@ export async function Dashboard({
       sql: `SELECT goal, SUM(spend) AS spend, ${RES_SUM} AS res FROM daily_insights WHERE account_id = ? AND date BETWEEN ? AND ? GROUP BY goal`,
       args: [id, since, until],
     }),
+    isMeta ? fetchPeriodReach(id, since, until) : Promise.resolve(null),
   ]);
 
   // Runs after the response is sent, so the Telegram call never slows the client's page.
@@ -429,6 +431,8 @@ export async function Dashboard({
           <div className="mini"><span>CTR</span><b>{ctr.toFixed(2)}%</b></div>
           <div className="mini"><span>CPM</span><b>{total.impressions ? money((total.spend / total.impressions) * 1000) : "-"}</b></div>
           <div className="mini"><span>CPC</span><b>{total.clicks ? money(total.spend / total.clicks) : "-"}</b></div>
+          {periodReach && periodReach.reach > 0 && <div className="mini"><span>Reach</span><b>{int(periodReach.reach)}</b></div>}
+          {periodReach && periodReach.reach > 0 && <div className="mini"><span>Frequency</span><b>{periodReach.frequency.toFixed(2)}</b></div>}
           {rn.present.length > 1 && rn.present.map((x) => (
             <div key={x.k} className="mini"><span>{x.label} · cost per {x.one}</span><b>{int(x.res)} · {x.res ? money(x.spend / x.res) : "-"} {x.res ? cur : ""}</b></div>
           ))}
